@@ -1,4 +1,4 @@
-# 🔒 SecureCollab - Secure Local-First Collaboration Platform
+# 🔒 AirWork - Secure Local-First Collaboration Platform
 
 **End-to-end encrypted, offline-first collaboration platform built with Next.js, Electron, and Signal Protocol.**
 
