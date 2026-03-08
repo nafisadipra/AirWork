@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain} from 'electron';
 import * as path from 'path';
+import { EncryptedDatabase } from './database/encrypted-db';
 
+let activeDatabase: EncryptedDatabase | null = null;
 let mainWindow : BrowserWindow | null;
 
 function createWindow() {
@@ -35,16 +37,40 @@ function createWindow() {
 function setupIpcHandlers(){
     ipcMain.handle('auth:login' , async (_event, credentials)=> {
         console.log('Login attempt for:', credentials.userId);
-        return {success: true};
+        try {
+      activeDatabase = new EncryptedDatabase(credentials.userId);
+      // isNewUser = false
+      const success = await activeDatabase.initialize(credentials.password, false); 
+      
+      if (success) {
+        return { success: true };
+      } else {
+        return { success: false, error: 'Invalid password or corrupted database' };
+      }
+    } catch (error) {
+      return { success: false, error: 'Login failed' };
+    }
     });
 
     ipcMain.handle('auth:register', async (_event, credentials)=>{
         console.log('Register attempt for:', credentials.userId);
-        return{success: true};
+        try {
+      activeDatabase = new EncryptedDatabase(credentials.userId);
+      // isNewUser = true (generates new salt)
+      const success = await activeDatabase.initialize(credentials.password, true);
+      
+      return { success, error: success ? undefined : 'Registration failed' };
+    } catch (error) {
+      return { success: false, error: 'Registration failed' };
+    }
     });
 
     ipcMain.handle('auth:logout', async () =>{
         console.log('logging out, clearing...');
+        if (activeDatabase) {
+        activeDatabase.close(); 
+        activeDatabase = null;
+        }
         return{ success: true};
 
     });
