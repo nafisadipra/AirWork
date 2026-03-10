@@ -13,7 +13,7 @@ build/
 # Electron
 dist-electron/
 release/
-app/
+
 *.asar
 
 # Production builds
