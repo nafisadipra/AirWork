@@ -1,8 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IPCAPI } from './types';
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
+
 const electronAPI: IPCAPI = {
   // Auth
   register: (credentials) => ipcRenderer.invoke('auth:register', credentials),
