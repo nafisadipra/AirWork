@@ -1,8 +1,8 @@
 import Database from 'better-sqlite3';
 import * as path from 'path';
 import * as fs from 'fs';
-import sodium from 'sodium-native';
 import { app } from 'electron';
+const sodium = require('sodium-native') as any;
 
 export class EncryptedDatabase {
   private db: Database.Database | null = null;
@@ -17,7 +17,7 @@ export class EncryptedDatabase {
   
 
   private deriveKey(password: string, salt: Buffer): Buffer {
-    const key = Buffer.alloc(sodium.crypto_pwhash_BYTES_MAX);
+    const key = Buffer.alloc(32);
     const passBuf = Buffer.from(password);
 
     sodium.crypto_pwhash(
