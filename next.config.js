@@ -2,7 +2,6 @@
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
-  swcMinify: true,
   
   // Disable image optimization for Electron
   images: {
@@ -15,7 +14,6 @@ const nextConfig = {
       config.target = 'electron-renderer';
     }
 
-    // Handle node modules
     config.externals = [
       ...(config.externals || []),
       {
