@@ -6,30 +6,35 @@ let activeDatabase: EncryptedDatabase | null = null;
 let mainWindow : BrowserWindow | null;
 
 function createWindow() {
-    mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 800,
-        webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            sandbox: true,
-            preload: path.join(__dirname, 'preload.js')
-        }
-    });
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    title: 'SecureCollab',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
 
-    if (process.env.NODE_ENV === 'development'){
-        mainWindow.loadURL('http://localhost:3000');
-        mainWindow.webContents.openDevTools();
-        } else {
-            mainWindow.loadFile(path.join(__dirname, '../../next/server/app/index.html'))
-        }
+  // Check if we are running the 'npm run dev' script
+  const isDev = process.env.npm_lifecycle_event === 'dev' || !app.isPackaged;
 
-        mainWindow.webContents.on('will-navigate', (event, url)=> {
-            if (!url.startsWith('http://localhost:3000') && !url.startsWith('file://')){
-                event.preventDefault();
-            }
-        });
-       
+  if (isDev) {
+    console.log('Running in Dev Mode: Loading localhost:3000');
+    mainWindow.loadURL('http://localhost:3000');
+    //mainWindow.webContents.openDevTools();
+  } else {
+    console.log('Running in Production: Loading compiled HTML');
+    mainWindow.loadFile(path.join(__dirname, '../.next/server/app/index.html'));
+  }
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('http://localhost:3000') && !url.startsWith('file://')) {
+      event.preventDefault();
+    }
+  });
 }
 
 // IPC (Inter-Process Communication)
