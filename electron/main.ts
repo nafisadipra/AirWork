@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain} from 'electron';
 import * as path from 'path';
 import { EncryptedDatabase } from './database/encrypted-db';
+import { v4 as uuidv4 } from 'uuid';
+import * as bip39 from 'bip39';
 
 let activeDatabase: EncryptedDatabase | null = null;
 let mainWindow : BrowserWindow | null;
@@ -57,18 +59,35 @@ function setupIpcHandlers(){
     }
     });
 
-    ipcMain.handle('auth:register', async (_event, credentials)=>{
-        console.log('Register attempt for:', credentials.userId);
-        try {
-      activeDatabase = new EncryptedDatabase(credentials.userId);
-      // isNewUser = true (generates new salt)
-      const success = await activeDatabase.initialize(credentials.password, true);
+    ipcMain.handle('auth:register', async (event, credentials) => {
+  const { userId, email, password } = credentials; 
+
+  try {
+    // 1. Generate 256 bits of entropy (which equals exactly 24 words)
+    const recoveryPhrase = bip39.generateMnemonic(256);
+
+    const db = new EncryptedDatabase(userId);
+    
+    // 2. We pass the recoveryPhrase into initialize so the DB can create the "Second Envelope"
+    const success = await db.initialize(password, true, recoveryPhrase);
+
+    if (success) {
+      // 3. Save the user to their own local phonebook
+      const stmt = db.getDb().prepare(`
+        INSERT INTO peers (id, username, email, public_key) 
+        VALUES (?, ?, ?, ?)
+      `);
+      stmt.run(uuidv4(), userId, email, 'placeholder_pub_key');
       
-      return { success, error: success ? undefined : 'Registration failed' };
-    } catch (error) {
-      return { success: false, error: 'Registration failed' };
+      // 4. CRITICAL: We return the recovery phrase to Next.js so the user can write it down!
+      return { success: true, recoveryPhrase: recoveryPhrase };
     }
-    });
+    
+    return { success: false, error: 'Failed to initialize encrypted vault' };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+});
 
     ipcMain.handle('auth:logout', async () =>{
         console.log('logging out, clearing...');
