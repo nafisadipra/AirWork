@@ -8,6 +8,23 @@ const electronAPI: IPCAPI = {
   login: (credentials) => ipcRenderer.invoke('auth:login', credentials),
   logout: () => ipcRenderer.invoke('auth:logout'),
 
+  // Projects
+  createProject: (data) => ipcRenderer.invoke('project:create', data),
+
+  // Projectlist 
+  listProjects: (data) => ipcRenderer.invoke('project:list', data),
+
+  // Tasks
+  listTasks: (data) => ipcRenderer.invoke('task:list', data),
+  createTask: (data) => ipcRenderer.invoke('task:create', data),
+  updateTaskStatus: (data) => ipcRenderer.invoke('task:updateStatus', data),
+
+  deleteTask: (data) => ipcRenderer.invoke('task:delete', data),
+
+  // Project Settings & Members
+  getProjectMembers: (data) => ipcRenderer.invoke('project:getMembers', data),
+  generateInviteToken: (data) => ipcRenderer.invoke('project:generateInvite', data),
+
   // Documents
   createDocument: (metadata) => ipcRenderer.invoke('doc:create', metadata),
   openDocument: (docId) => ipcRenderer.invoke('doc:open', docId),
