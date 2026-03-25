@@ -30,6 +30,22 @@ export interface IPCAPI {
   login: (credentials: AuthCredentials) => Promise<AuthResult>;
   logout: () => Promise<void>;
 
+  // Add this new line:
+  createProject: (data: { name: string; userId: string }) => Promise<{ success: boolean; projectId?: string; error?: string }>;
+
+  // Projectlists
+  listProjects: (data: { userId: string }) => Promise<{ success: boolean; projects?: any[]; error?: string }>;
+
+  // Tasks
+  listTasks: (data: { projectId: string }) => Promise<{ success: boolean; tasks?: any[]; error?: string }>;
+  createTask: (data: { projectId: string; title: string; status: string }) => Promise<{ success: boolean; taskId?: string; error?: string }>;
+  updateTaskStatus: (data: { taskId: string; newStatus: string }) => Promise<{ success: boolean; error?: string }>;
+
+  deleteTask: (data: { taskId: string }) => Promise<{ success: boolean; error?: string }>;
+
+  getProjectMembers: (data: { projectId: string }) => Promise<{ success: boolean; members?: any[]; error?: string }>;
+  generateInviteToken: (data: { projectId: string; userId: string }) => Promise<{ success: boolean; inviteToken?: string; error?: string }>;
+
   // Documents
   createDocument: (metadata: DocumentMetadata) => Promise<DocumentResult>;
   openDocument: (docId: string) => Promise<DocumentResult>;
