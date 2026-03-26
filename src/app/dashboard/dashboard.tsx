@@ -3,7 +3,8 @@
 
 import { useState, useEffect } from 'react';
 import KanbanBoard from './KanbanBoard';
-import Settings from './Settings'; // <--- Import the new Settings component
+import Settings from './Settings'; 
+import Documents from './Documents';
 
 export default function Dashboard() {
   const [username, setUsername] = useState('User');
@@ -71,6 +72,19 @@ export default function Dashboard() {
     } else {
       setTasks([]);
       setMembers([]);
+    }
+  }, [selectedProject]);
+
+  // <--- NEW: Listen for background P2P syncs and auto-refresh the board! --->
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (api.onSyncRefresh) {
+      api.onSyncRefresh(() => {
+        console.log("Background sync received! Refreshing board...");
+        if (selectedProject) {
+          fetchTasksAndMembers(selectedProject.id);
+        }
+      });
     }
   }, [selectedProject]);
 
@@ -244,7 +258,12 @@ export default function Dashboard() {
                   />
                 )}
 
-                {activeTab === 'docs' && <div className="text-[#A0A0A0] text-sm">Yjs Collaborative Documents space will go here.</div>}
+                {activeTab === 'docs' && (
+                  <Documents 
+                    selectedProject={selectedProject} 
+                    username={username} 
+                  />
+                )}
                 
                 {activeTab === 'chat' && <div className="text-[#A0A0A0] text-sm">Encrypted Peer-to-Peer Chat will go here.</div>}
                 
