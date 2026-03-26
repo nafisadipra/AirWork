@@ -38,8 +38,11 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
       const result = await api.createTask({ 
         projectId: selectedProject.id, 
         title: newTaskTitle, 
-        status 
-        // We will wire up the Assignee and Dates to the SQLite backend in the next step!
+        status,
+        // <--- THIS IS THE MISSING DATA! --->
+        assigneeId: newTaskAssignee || null,
+        startDate: newTaskStartDate || null,
+        dueDate: newTaskDueDate || null
       });
       
       if (result.success) {
@@ -49,6 +52,8 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
         setNewTaskDueDate('');
         setAddingTaskTo(null);
         fetchTasksAndMembers(selectedProject.id); 
+      } else {
+        console.error("Backend refused to save:", result.error);
       }
     } catch (error) {
       console.error("Failed to create task", error);
