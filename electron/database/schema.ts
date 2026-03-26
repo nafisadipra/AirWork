@@ -52,21 +52,23 @@ export const INITIAL_SCHEMA = `
     project_id TEXT NOT NULL,
     title TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'todo',
-    assigned_to TEXT, 
     position INTEGER NOT NULL DEFAULT 0,
+    assigned_to TEXT, 
+    start_date TEXT, 
+    due_date TEXT, 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    -- SET NULL: If a user leaves, their tasks remain on the board but become unassigned
     FOREIGN KEY (assigned_to) REFERENCES peers(id) ON DELETE SET NULL
   );
 
   CREATE TABLE IF NOT EXISTS documents (
     id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL, 
+    project_id TEXT NOT NULL, 
+    title TEXT NOT NULL,
     yjs_state BLOB,
     last_edited_by TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (last_edited_by) REFERENCES peers(id) ON DELETE SET NULL
   );
 
