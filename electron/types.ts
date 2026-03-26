@@ -38,7 +38,14 @@ export interface IPCAPI {
 
   // Tasks
   listTasks: (data: { projectId: string }) => Promise<{ success: boolean; tasks?: any[]; error?: string }>;
-  createTask: (data: { projectId: string; title: string; status: string }) => Promise<{ success: boolean; taskId?: string; error?: string }>;
+  createTask: (args: { 
+    projectId: string; 
+    title: string; 
+    status: string; 
+    assigneeId?: string | null; 
+    startDate?: string | null; 
+    dueDate?: string | null; 
+  }) => Promise<{ success: boolean; taskId?: string; error?: string }>;
   updateTaskStatus: (data: { taskId: string; newStatus: string }) => Promise<{ success: boolean; error?: string }>;
 
   deleteTask: (data: { taskId: string }) => Promise<{ success: boolean; error?: string }>;
@@ -47,9 +54,10 @@ export interface IPCAPI {
   generateInviteToken: (data: { projectId: string; userId: string }) => Promise<{ success: boolean; inviteToken?: string; error?: string }>;
 
   // Documents
-  createDocument: (metadata: DocumentMetadata) => Promise<DocumentResult>;
+ // Documents
+  createDocument: (metadata: { projectId: string, title: string, type: string }) => Promise<DocumentResult>;
   openDocument: (docId: string) => Promise<DocumentResult>;
-  listDocuments: () => Promise<DocumentResult>;
+  listDocuments: (data: { projectId: string }) => Promise<DocumentResult>;
   deleteDocument: (docId: string) => Promise<{ success: boolean }>;
 
   // Peers & P2P
@@ -57,6 +65,9 @@ export interface IPCAPI {
   trustPeer: (peerId: string) => Promise<{ success: boolean }>;
   blockPeer: (peerId: string) => Promise<{ success: boolean }>;
   getSafetyNumber: (peerId: string) => Promise<{ success: boolean; safetyNumber?: string }>;
+
+  // Sync Events
+  onSyncRefresh: (callback: () => void) => void;
 
   // Security & Backup
   getAuditLog: (limit: number) => Promise<{ success: boolean; logs?: any[] }>;
