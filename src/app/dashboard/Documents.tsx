@@ -1,7 +1,7 @@
-// src/app/dashboard/Documents.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
+import Editor from './Editor';
 
 interface DocumentsProps {
   selectedProject: any;
@@ -70,9 +70,8 @@ export default function Documents({ selectedProject, username }: DocumentsProps)
             Live Syncing
           </span>
         </div>
-        <div className="flex-1 p-8 flex items-center justify-center text-[#666]">
-          {/* This is where the TipTap/Yjs Editor will go! */}
-          <p className="text-sm">Collaborative Editor Loading...</p>
+        <div className="flex-1 p-8 overflow-y-auto">
+          <Editor documentId={activeDoc.id} username={username} />
         </div>
       </div>
     );
