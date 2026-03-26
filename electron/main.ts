@@ -3,8 +3,10 @@ import * as path from 'path';
 import { EncryptedDatabase } from './database/encrypted-db';
 import { v4 as uuidv4 } from 'uuid';
 import * as bip39 from 'bip39';
+import { P2PEngine } from './p2p';
 
 let activeDatabase: EncryptedDatabase | null = null;
+let p2pEngine: P2PEngine | null = null;
 let mainWindow : BrowserWindow | null;
 
 function createWindow() {
@@ -42,21 +44,69 @@ function createWindow() {
 // IPC (Inter-Process Communication)
 
 function setupIpcHandlers(){
-    ipcMain.handle('auth:login' , async (_event, credentials)=> {
+    ipcMain.handle('auth:login', async (_event, credentials) => {
         console.log('Login attempt for:', credentials.userId);
         try {
-      activeDatabase = new EncryptedDatabase(credentials.userId);
-      // isNewUser = false
-      const success = await activeDatabase.initialize(credentials.password, false); 
-      
-      if (success) {
-        return { success: true };
-      } else {
-        return { success: false, error: 'Invalid password or corrupted database' };
-      }
-    } catch (error) {
-      return { success: false, error: 'Login failed' };
-    }
+            // 1. Initialize the encrypted local vault
+            activeDatabase = new EncryptedDatabase(credentials.userId);
+            const success = await activeDatabase.initialize(credentials.password, false); 
+            
+            if (success) {
+                // 2. Start the P2P Engine so other local users can find us
+                const db = activeDatabase.getDb();
+                const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(credentials.userId) as any;
+                
+                if (userRecord) {
+                    p2pEngine = new P2PEngine(userRecord.id, credentials.userId);
+                    p2pEngine.start();
+                    
+                    // Listen for newly discovered peers and send them to the frontend
+                    p2pEngine.on('peer-discovered', (peerData) => {
+                        if (mainWindow) {
+                            mainWindow.webContents.send('peer-discovered', peerData);
+                        }
+                    });
+
+                    // <--- NEW: INCOMING REAL-TIME SYNC LOGIC --->
+                    p2pEngine.on('message', (payload) => {
+                        if (!activeDatabase) return;
+                        const db = activeDatabase.getDb();
+                        
+                        try {
+                            if (payload.type === 'SYNC_TASK_UPSERT') {
+                                const t = payload.task;
+                                console.log(`[SYNC] 📥 Receiving task update: ${t.title}`);
+                                
+                                // Insert the task, or Update it if it already exists!
+                                db.prepare(`
+                                    INSERT INTO tasks (id, project_id, title, status, position, start_date, due_date)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                                    ON CONFLICT(id) DO UPDATE SET
+                                    status=excluded.status, position=excluded.position, title=excluded.title
+                                `).run(t.id, t.project_id, t.title, t.status, t.position, t.start_date, t.due_date);
+                                
+                                // Tell the React Frontend to instantly refresh!
+                                if (mainWindow) mainWindow.webContents.send('sync-refresh');
+                            } 
+                            else if (payload.type === 'SYNC_TASK_DELETE') {
+                                console.log(`[SYNC] 🗑️ Receiving task deletion: ${payload.taskId}`);
+                                db.prepare(`DELETE FROM tasks WHERE id = ?`).run(payload.taskId);
+                                if (mainWindow) mainWindow.webContents.send('sync-refresh');
+                            }
+                        } catch (err) {
+                            console.error('[SYNC] Failed to process incoming sync:', err);
+                        }
+                    });
+                }
+
+                return { success: true };
+            } else {
+                return { success: false, error: 'Invalid password or corrupted database' };
+            }
+        } catch (error) {
+            console.error('Login error:', error);
+            return { success: false, error: 'Login failed' };
+        }
     });
 
     ipcMain.handle('auth:register', async (event, credentials) => {
@@ -100,14 +150,42 @@ function setupIpcHandlers(){
 
     });
 
-    ipcMain.handle('doc:create', async (_event , metadata)=>{
-        console.log('Creating new document:',metadata.title);
-        return{success: true, id:`doc-${Date.now()}`};
+    // 1. Create a new document in the database
+    ipcMain.handle('doc:create', async (_event, { projectId, title }) => {
+        if (!activeDatabase) return { success: false, error: 'Database not active' };
+        try {
+            const docId = uuidv4();
+            const db = activeDatabase.getDb();
+            
+            db.prepare(`
+                INSERT INTO documents (id, project_id, title) 
+                VALUES (?, ?, ?)
+            `).run(docId, projectId, title);
 
+            console.log(`[DOC] 📄 Created new document: ${title}`);
+            return { success: true, id: docId };
+        } catch (error: any) {
+            console.error('Failed to create document:', error);
+            return { success: false, error: error.message };
+        }
     });
 
-    ipcMain.handle('doc:list', async ()=>{
-        return{success: true, documents:[]};
+    // 2. List all documents for the current project
+    ipcMain.handle('doc:list', async (_event, { projectId }) => {
+        if (!activeDatabase) return { success: false, error: 'Database not active' };
+        try {
+            const db = activeDatabase.getDb();
+            const documents = db.prepare(`
+                SELECT * FROM documents 
+                WHERE project_id = ? 
+                ORDER BY updated_at DESC
+            `).all(projectId);
+            
+            return { success: true, documents };
+        } catch (error: any) {
+            console.error('Failed to list documents:', error);
+            return { success: false, error: error.message };
+        }
     });
 
     ipcMain.handle('project:create', async (_event, { name, userId }) => {
@@ -195,22 +273,43 @@ function setupIpcHandlers(){
     });
 
     // 2. Create a new task
-    ipcMain.handle('task:create', async (_event, { projectId, title, status }) => {
+    // 2. Create a new task
+    ipcMain.handle('task:create', async (_event, args: any) => { // <--- Added 'args: any' here
+        const { projectId, title, status, assigneeId, startDate, dueDate } = args; // <--- Destructured here
+        
         if (!activeDatabase) return { success: false, error: 'Database not active' };
+        
         try {
             const taskId = uuidv4();
             const db = activeDatabase.getDb();
             
-            // Give it a default position so it appears at the bottom of the list
+            // Give it a default position
             const posResult = db.prepare(`SELECT MAX(position) as maxPos FROM tasks WHERE project_id = ? AND status = ?`).get(projectId, status) as any;
             const position = (posResult?.maxPos || 0) + 1000;
 
             const stmt = db.prepare(`
-                INSERT INTO tasks (id, project_id, title, status, position) 
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO tasks (id, project_id, title, status, position, assigned_to, start_date, due_date) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `);
-            stmt.run(taskId, projectId, title, status, position);
             
+            // <--- UPDATED: Fallback to null so SQLite doesn't crash on undefined --->
+            stmt.run(
+                taskId, 
+                projectId, 
+                title, 
+                status, 
+                position, 
+                assigneeId || null, 
+                startDate || null, 
+                dueDate || null
+            );
+            
+            // Broadcast to P2P if active
+            if (p2pEngine) {
+                const newTask = db.prepare(`SELECT * FROM tasks WHERE id = ?`).get(taskId);
+                p2pEngine.broadcast({ type: 'SYNC_TASK_UPSERT', task: newTask });
+            }
+
             return { success: true, taskId };
         } catch (error: any) {
             console.error('Failed to create task:', error);
@@ -224,9 +323,15 @@ function setupIpcHandlers(){
         try {
             const db = activeDatabase.getDb();
             db.prepare(`UPDATE tasks SET status = ? WHERE id = ?`).run(newStatus, taskId);
+            
+            // <--- NEW: BROADCAST THE CHANGE --->
+            if (p2pEngine) {
+                const updatedTask = db.prepare(`SELECT * FROM tasks WHERE id = ?`).get(taskId);
+                p2pEngine.broadcast({ type: 'SYNC_TASK_UPSERT', task: updatedTask });
+            }
+
             return { success: true };
         } catch (error: any) {
-            console.error('Failed to update task status:', error);
             return { success: false, error: error.message };
         }
     });
