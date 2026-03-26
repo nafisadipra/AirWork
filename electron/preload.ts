@@ -28,7 +28,7 @@ const electronAPI: IPCAPI = {
   // Documents
   createDocument: (metadata) => ipcRenderer.invoke('doc:create', metadata),
   openDocument: (docId) => ipcRenderer.invoke('doc:open', docId),
-  listDocuments: () => ipcRenderer.invoke('doc:list'),
+  listDocuments: (data) => ipcRenderer.invoke('doc:list', data),
   deleteDocument: (docId) => ipcRenderer.invoke('doc:delete', docId),
 
   // Peers
@@ -36,6 +36,11 @@ const electronAPI: IPCAPI = {
   trustPeer: (peerId) => ipcRenderer.invoke('peers:trust', peerId),
   blockPeer: (peerId) => ipcRenderer.invoke('peers:block', peerId),
   getSafetyNumber: (peerId) => ipcRenderer.invoke('peers:get-safety-number', peerId),
+
+  // Sync Events
+  onSyncRefresh: (callback: () => void) => {
+    ipcRenderer.on('sync-refresh', () => callback());
+  },
 
   // Security
   getAuditLog: (limit) => ipcRenderer.invoke('security:get-audit-log', limit),
