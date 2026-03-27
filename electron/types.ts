@@ -30,8 +30,8 @@ export interface IPCAPI {
   login: (credentials: AuthCredentials) => Promise<AuthResult>;
   logout: () => Promise<void>;
 
-  // Add this new line:
   createProject: (data: { name: string; userId: string }) => Promise<{ success: boolean; projectId?: string; error?: string }>;
+  joinProject: (data: { token: string; userId: string }) => Promise<{ success: boolean; error?: string }>;
 
   // Projectlists
   listProjects: (data: { userId: string }) => Promise<{ success: boolean; projects?: any[]; error?: string }>;
@@ -54,7 +54,6 @@ export interface IPCAPI {
   generateInviteToken: (data: { projectId: string; userId: string }) => Promise<{ success: boolean; inviteToken?: string; error?: string }>;
 
   // Documents
- // Documents
   createDocument: (metadata: { projectId: string, title: string, type: string }) => Promise<DocumentResult>;
   openDocument: (docId: string) => Promise<DocumentResult>;
   listDocuments: (data: { projectId: string }) => Promise<DocumentResult>;
@@ -69,6 +68,12 @@ export interface IPCAPI {
   // Sync Events
   onSyncRefresh: (callback: () => void) => void;
 
+  // Chat
+  getMessages: (data: { projectId: string }) => Promise<{ success: boolean; messages?: any[]; error?: string }>;
+  sendMessage: (data: { id: string; projectId: string; sender: string; text: string; attachment: string | null; attachmentName: string | null; timestamp: string }) => Promise<{ success: boolean }>;
+  editMessage: (data: { id: string; text: string }) => Promise<{ success: boolean }>;
+  deleteMessage: (data: { id: string }) => Promise<{ success: boolean }>;
+
   // Security & Backup
   getAuditLog: (limit: number) => Promise<{ success: boolean; logs?: any[] }>;
   getStats: () => Promise<{ success: boolean; stats?: any }>;
@@ -79,8 +84,11 @@ export interface IPCAPI {
   onPeerDiscovered: (callback: (peerId: string) => void) => void;
   onPeerConnected: (callback: (peerId: string) => void) => void;
   onPeerDisconnected: (callback: (peerId: string) => void) => void;
-  onDocumentUpdate: (callback: (docId: string) => void) => void;
   onUpdateAvailable: (callback: (info: any) => void) => void;
+
+  // Live P2P Sync (Upgraded)
+  sendDocumentUpdate: (data: { docId: string, update: number[] }) => void;
+  onDocumentUpdate: (callback: (data: { docId: string, update: number[] }) => void) => () => void;
 }
 
 // Extend the global Window object so Next.js recognizes the API
