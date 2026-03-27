@@ -1,3 +1,4 @@
+// electron/main.ts
 import { app, BrowserWindow, ipcMain} from 'electron';
 import * as path from 'path';
 import { EncryptedDatabase } from './database/encrypted-db';
@@ -67,7 +68,7 @@ function setupIpcHandlers(){
                         }
                     });
 
-                    // <--- NEW: INCOMING REAL-TIME SYNC LOGIC --->
+                    // <--- INCOMING REAL-TIME SYNC LOGIC --->
                     p2pEngine.on('message', (payload) => {
                         if (!activeDatabase) return;
                         const db = activeDatabase.getDb();
@@ -93,6 +94,84 @@ function setupIpcHandlers(){
                                 db.prepare(`DELETE FROM tasks WHERE id = ?`).run(payload.taskId);
                                 if (mainWindow) mainWindow.webContents.send('sync-refresh');
                             }
+                            else if (payload.type === 'SYNC_DOC_UPDATE') {
+                                if (mainWindow) {
+                                    mainWindow.webContents.send('doc:receive-update', {
+                                        docId: payload.docId,
+                                        update: payload.update
+                                    });
+                                }
+                            }
+                            // <--- NEW: SOMEONE IS KNOCKING WITH A TOKEN --->
+                            else if (payload.type === 'JOIN_PROJECT_REQUEST') {
+                                const invite = db.prepare(`SELECT * FROM project_invites WHERE invite_token = ? AND expires_at > ?`).get(payload.token, new Date().toISOString()) as any;
+                                
+                                if (invite) {
+                                    console.log(`[P2P] 🔑 Valid token received from ${payload.username}. Beaming project data...`);
+                                    
+                                    // Add them to our local members table
+                                    db.prepare(`
+                                        INSERT INTO project_members (project_id, peer_id, role) 
+                                        VALUES (?, ?, ?) ON CONFLICT DO NOTHING
+                                    `).run(invite.project_id, payload.peerId, invite.role);
+                                    
+                                    // Make sure we have their peer record
+                                    db.prepare(`
+                                        INSERT INTO peers (id, username, email, public_key) 
+                                        VALUES (?, ?, '', 'placeholder') ON CONFLICT DO NOTHING
+                                    `).run(payload.peerId, payload.username);
+
+                                    // Gather all the project data
+                                    const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(invite.project_id);
+                                    const tasks = db.prepare(`SELECT * FROM tasks WHERE project_id = ?`).all(invite.project_id);
+                                    const docs = db.prepare(`SELECT * FROM documents WHERE project_id = ?`).all(invite.project_id);
+                                    const members = db.prepare(`SELECT * FROM project_members WHERE project_id = ?`).all(invite.project_id);
+
+                                    // Beam it directly back to them
+                                    p2pEngine?.broadcast({
+                                        type: 'JOIN_PROJECT_ACCEPT',
+                                        targetPeerId: payload.peerId,
+                                        project,
+                                        tasks,
+                                        docs,
+                                        members
+                                    });
+                                    
+                                    // Refresh our own UI to show the new member!
+                                    if (mainWindow) mainWindow.webContents.send('sync-refresh');
+                                }
+                            }
+                            // <--- NEW: OUR KNOCK WAS ANSWERED, HERE IS THE DATA --->
+                            else if (payload.type === 'JOIN_PROJECT_ACCEPT') {
+                                const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(credentials.userId) as any;
+                                
+                                // Only process it if the data is meant for US
+                                if (userRecord && payload.targetPeerId === userRecord.id) {
+                                    console.log(`[P2P] 🎉 Project access granted! Saving locally...`);
+                                    
+                                    // Save Project
+                                    db.prepare(`INSERT INTO projects (id, name, created_by, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`)
+                                      .run(payload.project.id, payload.project.name, payload.project.created_by, payload.project.created_at);
+                                    
+                                    // Save Members
+                                    const insertMember = db.prepare(`INSERT INTO project_members (project_id, peer_id, role, joined_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`);
+                                    payload.members.forEach((m: any) => insertMember.run(m.project_id, m.peer_id, m.role, m.joined_at));
+
+                                    // Save Tasks
+                                    const insertTask = db.prepare(`
+                                        INSERT INTO tasks (id, project_id, title, status, position, assigned_to, start_date, due_date) 
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING
+                                    `);
+                                    payload.tasks.forEach((t: any) => insertTask.run(t.id, t.project_id, t.title, t.status, t.position, t.assigned_to, t.start_date, t.due_date));
+
+                                    // Save Docs
+                                    const insertDoc = db.prepare(`INSERT INTO documents (id, project_id, title, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`);
+                                    payload.docs.forEach((d: any) => insertDoc.run(d.id, d.project_id, d.title, d.updated_at));
+
+                                    // Refresh the UI to show the new project!
+                                    if (mainWindow) mainWindow.webContents.send('sync-refresh');
+                                }
+                            }
                         } catch (err) {
                             console.error('[SYNC] Failed to process incoming sync:', err);
                         }
@@ -110,47 +189,43 @@ function setupIpcHandlers(){
     });
 
     ipcMain.handle('auth:register', async (event, credentials) => {
-  const { userId, email, password } = credentials; 
+        const { userId, email, password } = credentials; 
 
-  try {
-    // 1. Generate 256 bits of entropy (which equals exactly 24 words)
-    const recoveryPhrase = bip39.generateMnemonic(256);
+        try {
+            const recoveryPhrase = bip39.generateMnemonic(256);
+            const db = new EncryptedDatabase(userId);
+            
+            activeDatabase = db
+            const success = await db.initialize(password, true, recoveryPhrase);
 
-    const db = new EncryptedDatabase(userId);
-    
-    activeDatabase = db
-    // 2. We pass the recoveryPhrase into initialize so the DB can create the "Second Envelope"
-    const success = await db.initialize(password, true, recoveryPhrase);
-
-    if (success) {
-      // 3. Save the user to their own local phonebook
-      const stmt = db.getDb().prepare(`
-        INSERT INTO peers (id, username, email, public_key) 
-        VALUES (?, ?, ?, ?)
-      `);
-      stmt.run(uuidv4(), userId, email, 'placeholder_pub_key');
-      
-      // 4. CRITICAL: We return the recovery phrase to Next.js so the user can write it down!
-      return { success: true, recoveryPhrase: recoveryPhrase };
-    }
-    
-    return { success: false, error: 'Failed to initialize encrypted vault' };
-  } catch (error: any) {
-    return { success: false, error: error.message };
-  }
-});
+            if (success) {
+                const stmt = db.getDb().prepare(`
+                    INSERT INTO peers (id, username, email, public_key) 
+                    VALUES (?, ?, ?, ?)
+                `);
+                stmt.run(uuidv4(), userId, email, 'placeholder_pub_key');
+                return { success: true, recoveryPhrase: recoveryPhrase };
+            }
+            
+            return { success: false, error: 'Failed to initialize encrypted vault' };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
 
     ipcMain.handle('auth:logout', async () =>{
         console.log('logging out, clearing...');
         if (activeDatabase) {
-        activeDatabase.close(); 
-        activeDatabase = null;
+            activeDatabase.close(); 
+            activeDatabase = null;
+        }
+        if (p2pEngine) {
+            p2pEngine.stop();
+            p2pEngine = null;
         }
         return{ success: true};
-
     });
 
-    // 1. Create a new document in the database
     ipcMain.handle('doc:create', async (_event, { projectId, title }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
@@ -170,7 +245,6 @@ function setupIpcHandlers(){
         }
     });
 
-    // 2. List all documents for the current project
     ipcMain.handle('doc:list', async (_event, { projectId }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
@@ -195,23 +269,17 @@ function setupIpcHandlers(){
             const projectId = uuidv4();
             const db = activeDatabase.getDb();
             
-            // <--- THE FIX: Look up the user's internal UUID using their username --->
             const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(userId) as any;
-            
-            if (!userRecord) {
-                return { success: false, error: 'Could not find local user profile.' };
-            }
+            if (!userRecord) return { success: false, error: 'Could not find local user profile.' };
             
             const peerId = userRecord.id;
 
-            // 1. Insert the project using the correct UUID (peerId)
             const projectStmt = db.prepare(`
                 INSERT INTO projects (id, name, created_by) 
                 VALUES (?, ?, ?)
             `);
             projectStmt.run(projectId, name, peerId);
 
-            // 2. Make the creator an 'admin' member using the correct UUID
             const memberStmt = db.prepare(`
                 INSERT INTO project_members (project_id, peer_id, role) 
                 VALUES (?, ?, 'admin')
@@ -232,11 +300,9 @@ function setupIpcHandlers(){
         try {
             const db = activeDatabase.getDb();
             
-            // 1. Get the internal UUID for the current user
             const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(userId) as any;
             if (!userRecord) return { success: false, error: 'User not found' };
             
-            // 2. Fetch all projects where this user is a member
             const projects = db.prepare(`
                 SELECT p.id, p.name, pm.role, p.created_at
                 FROM projects p
@@ -253,13 +319,10 @@ function setupIpcHandlers(){
     });
 
     // --- KANBAN BOARD HANDLERS ---
-
-    // 1. Fetch all tasks for a specific project
     ipcMain.handle('task:list', async (_event, { projectId }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
             const db = activeDatabase.getDb();
-            // Fetch tasks, ordering them by their saved position
             const tasks = db.prepare(`
                 SELECT * FROM tasks 
                 WHERE project_id = ? 
@@ -272,10 +335,8 @@ function setupIpcHandlers(){
         }
     });
 
-    // 2. Create a new task
-    // 2. Create a new task
-    ipcMain.handle('task:create', async (_event, args: any) => { // <--- Added 'args: any' here
-        const { projectId, title, status, assigneeId, startDate, dueDate } = args; // <--- Destructured here
+    ipcMain.handle('task:create', async (_event, args: any) => { 
+        const { projectId, title, status, assigneeId, startDate, dueDate } = args; 
         
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         
@@ -283,7 +344,6 @@ function setupIpcHandlers(){
             const taskId = uuidv4();
             const db = activeDatabase.getDb();
             
-            // Give it a default position
             const posResult = db.prepare(`SELECT MAX(position) as maxPos FROM tasks WHERE project_id = ? AND status = ?`).get(projectId, status) as any;
             const position = (posResult?.maxPos || 0) + 1000;
 
@@ -292,7 +352,6 @@ function setupIpcHandlers(){
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `);
             
-            // <--- UPDATED: Fallback to null so SQLite doesn't crash on undefined --->
             stmt.run(
                 taskId, 
                 projectId, 
@@ -304,7 +363,6 @@ function setupIpcHandlers(){
                 dueDate || null
             );
             
-            // Broadcast to P2P if active
             if (p2pEngine) {
                 const newTask = db.prepare(`SELECT * FROM tasks WHERE id = ?`).get(taskId);
                 p2pEngine.broadcast({ type: 'SYNC_TASK_UPSERT', task: newTask });
@@ -317,14 +375,12 @@ function setupIpcHandlers(){
         }
     });
 
-    // 3. Move a task to a different column
     ipcMain.handle('task:updateStatus', async (_event, { taskId, newStatus }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
             const db = activeDatabase.getDb();
             db.prepare(`UPDATE tasks SET status = ? WHERE id = ?`).run(newStatus, taskId);
             
-            // <--- NEW: BROADCAST THE CHANGE --->
             if (p2pEngine) {
                 const updatedTask = db.prepare(`SELECT * FROM tasks WHERE id = ?`).get(taskId);
                 p2pEngine.broadcast({ type: 'SYNC_TASK_UPSERT', task: updatedTask });
@@ -336,7 +392,6 @@ function setupIpcHandlers(){
         }
     });
 
-    // 4. Delete a task
     ipcMain.handle('task:delete', async (_event, { taskId }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
@@ -350,13 +405,10 @@ function setupIpcHandlers(){
     });
 
     // --- PROJECT SETTINGS & MEMBERS ---
-
-    // 1. Fetch the real team roster for a project
     ipcMain.handle('project:getMembers', async (_event, { projectId }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
             const db = activeDatabase.getDb();
-            // Join peers and project_members to get the actual usernames and roles
             const members = db.prepare(`
                 SELECT p.id, p.username, pm.role, pm.joined_at 
                 FROM peers p
@@ -371,20 +423,14 @@ function setupIpcHandlers(){
         }
     });
 
-    // 2. Generate a secure invite token
     ipcMain.handle('project:generateInvite', async (_event, { projectId, userId }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
             const db = activeDatabase.getDb();
-            
-            // Get the internal UUID of the user generating the invite
             const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(userId) as any;
             if (!userRecord) throw new Error("User not found");
 
-            // Create a short, readable token (e.g., aw-a1b2c3d4)
             const inviteToken = 'aw-' + uuidv4().split('-')[0]; 
-            
-            // Set expiry for 24 hours from now
             const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
             db.prepare(`
@@ -395,6 +441,39 @@ function setupIpcHandlers(){
             return { success: true, inviteToken };
         } catch (error: any) {
             console.error('Failed to generate invite:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.on('doc:send-update', (_event, { docId, update }) => {
+        if (p2pEngine) {
+            p2pEngine.broadcast({ type: 'SYNC_DOC_UPDATE', docId, update });
+        }
+    });
+
+    // <--- NEW: INITIATE A PROJECT JOIN OVER THE NETWORK --->
+    ipcMain.handle('project:join', async (_event, { token, userId }) => {
+        if (!activeDatabase || !p2pEngine) return { success: false, error: 'Network engine not ready' };
+        try {
+            const db = activeDatabase.getDb();
+            const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(userId) as any;
+            if (!userRecord) return { success: false, error: 'User profile not found' };
+
+            console.log(`[P2P] 📡 Broadcasting token: ${token}`);
+            
+            // Broadcast the token to everyone on the network
+            p2pEngine.broadcast({
+                type: 'JOIN_PROJECT_REQUEST',
+                token: token,
+                peerId: userRecord.id,
+                username: userId
+            });
+
+            // We immediately return success. The UI will wait 1.5s for the 
+            // JOIN_PROJECT_ACCEPT to hit the background sync listener!
+            return { success: true };
+        } catch (error: any) {
+            console.error('Failed to request project join:', error);
             return { success: false, error: error.message };
         }
     });
