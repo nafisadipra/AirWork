@@ -51,7 +51,6 @@ export class P2PEngine extends EventEmitter {
                         
                         this.emit('peer-discovered', { id, user });
                         
-                        // <--- NEW: Immediately try to connect to them! --->
                         this.connectToPeer(id, rinfo.address, parseInt(port));
                     }
                 }
@@ -70,7 +69,6 @@ export class P2PEngine extends EventEmitter {
         });
     }
 
-    // <--- NEW: The Dial-Out Function --->
     private connectToPeer(targetPeerId: string, address: string, port: number) {
         if (this.activeConnections.has(targetPeerId)) return; // Already connected!
 
@@ -81,76 +79,82 @@ export class P2PEngine extends EventEmitter {
             this.activeConnections.set(targetPeerId, socket);
             this.setupSocketHandlers(socket, targetPeerId);
             
-            // Introduce ourselves over the new TCP connection
             this.sendMessage(socket, { type: 'HANDSHAKE', peerId: this.peerId, username: this.username });
         });
 
         socket.on('error', (err) => {
             console.log(`[P2P] ❌ Failed to connect to ${targetPeerId}:`, err.message);
-            this.knownPeers.delete(targetPeerId); // Forget them so we can try again later
+            this.knownPeers.delete(targetPeerId); 
         });
     }
 
-    // <--- NEW: Handling when someone dials US --->
     private handleIncomingConnection(socket: net.Socket) {
         console.log(`[P2P] 🔔 Someone is knocking at our TCP door from ${socket.remoteAddress}`);
-        
-        // We don't know their ID yet until they send the HANDSHAKE, so we use a temporary ID
         const tempId = `unknown-${Date.now()}`; 
         this.setupSocketHandlers(socket, tempId);
     }
 
-    // <--- NEW: The Communication Protocol --->
     private setupSocketHandlers(socket: net.Socket, connectionId: string) {
         let actualPeerId = connectionId;
+        
+        // <--- NEW: Buffer to handle rapid-fire keystroke data chunks safely --->
+        let buffer = '';
 
         socket.on('data', (data) => {
-            try {
-                // Parse the incoming JSON message
-                const message = JSON.parse(data.toString());
+            buffer += data.toString();
+            
+            let boundary = buffer.indexOf('\n');
+            while (boundary !== -1) {
+                const messageStr = buffer.substring(0, boundary);
+                buffer = buffer.substring(boundary + 1); // remove processed message from buffer
                 
-                if (message.type === 'HANDSHAKE') {
-                    actualPeerId = message.peerId;
-                    this.activeConnections.set(actualPeerId, socket);
-                    console.log(`[P2P] 🤝 Handshake complete with ${message.username}. Secure tube established.`);
-                } else {
-                    // <--- NEW: If it's not a handshake, it's Sync Data! Pass it up to main.ts --->
-                    this.emit('message', message);
+                if (messageStr.trim()) {
+                    try {
+                        const message = JSON.parse(messageStr);
+                        
+                        if (message.type === 'HANDSHAKE') {
+                            actualPeerId = message.peerId;
+                            this.activeConnections.set(actualPeerId, socket);
+                            console.log(`[P2P] 🤝 Handshake complete with ${message.username}. Secure tube established.`);
+                        } else {
+                            // Pass the Sync Data up to main.ts
+                            this.emit('message', message);
+                        }
+                        
+                    } catch (error) {
+                        console.error('[P2P] Received garbled data (failed to parse):', messageStr);
+                    }
                 }
-                
-            } catch (error) {
-                console.error('[P2P] Received garbled data:', data.toString());
+                boundary = buffer.indexOf('\n'); // check if there is another message in the buffer
             }
         });
 
         socket.on('close', () => {
             console.log(`[P2P] 🔌 Connection closed with ${actualPeerId}`);
             this.activeConnections.delete(actualPeerId);
-            this.knownPeers.delete(actualPeerId); // Forget them so they can be re-discovered
+            this.knownPeers.delete(actualPeerId); 
         });
     }
 
-    // Helper to send JSON messages
     private sendMessage(socket: net.Socket, payload: any) {
         if (socket && !socket.destroyed) {
             socket.write(JSON.stringify(payload) + '\n');
         }
     }
 
-    // <--- NEW: Broadcast a payload to all connected peers --->
     broadcast(payload: any) {
         const messageString = JSON.stringify(payload) + '\n';
         this.activeConnections.forEach((socket, peerId) => {
             if (!socket.destroyed) {
-                console.log(`[P2P] 📤 Syncing data to ${peerId}...`);
+                // We won't log every single keystroke broadcast here so it doesn't spam your terminal!
                 socket.write(messageString);
             }
         });
     }
 
     stop() {
-        this.udpSocket.close();
-        this.tcpServer.close();
+        if (this.udpSocket) this.udpSocket.close();
+        if (this.tcpServer) this.tcpServer.close();
         this.activeConnections.forEach(socket => socket.destroy());
     }
 }
