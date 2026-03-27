@@ -1,6 +1,7 @@
+// src/app/dashboard/Editor.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
@@ -34,6 +35,40 @@ const Divider = () => <div className="w-px h-6 bg-[#2A2A2A] mx-1"></div>;
 
 export default function Editor({ documentId, username }: EditorProps) {
   const [ydoc] = useState(() => new Y.Doc());
+
+  // ==========================================
+  // P2P SYNC ENGINE: SEND & RECEIVE KEYSTROKES
+  // ==========================================
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api) return;
+
+    // 1. SEND YOUR TYPING: Listen for local changes and send them to the network
+    const updateHandler = (update: Uint8Array, origin: any) => {
+      // Only broadcast if the change came from YOU, not an echo from the network
+      if (origin !== 'network') {
+        const updateArray = Array.from(update); // Convert binary to standard array for safe transit
+        api.sendDocumentUpdate({ docId: documentId, update: updateArray });
+      }
+    };
+    ydoc.on('update', updateHandler);
+
+    // 2. RECEIVE TEAM'S TYPING: Listen for network changes and apply them
+    const removeListener = api.onDocumentUpdate((data: { docId: string, update: number[] }) => {
+      if (data.docId === documentId) {
+        const updateBinary = new Uint8Array(data.update); // Convert back to binary
+        // Apply it, and tag it as 'network' so we don't accidentally echo it back!
+        Y.applyUpdate(ydoc, updateBinary, 'network'); 
+      }
+    });
+
+    // 3. CLEANUP: When you close the document, stop listening
+    return () => {
+      ydoc.off('update', updateHandler);
+      if (removeListener) removeListener();
+    };
+  }, [ydoc, documentId]);
+  // ==========================================
 
   const editor = useEditor({
     immediatelyRender: false,
