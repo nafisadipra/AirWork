@@ -5,7 +5,7 @@ export const INITIAL_SCHEMA = `
   CREATE TABLE IF NOT EXISTS peers (
     id TEXT PRIMARY KEY,
     username TEXT NOT NULL,
-    email TEXT, -- <--- ADDED THIS LINE
+    email TEXT,
     public_key TEXT NOT NULL,
     last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -18,7 +18,6 @@ export const INITIAL_SCHEMA = `
     name TEXT NOT NULL,
     created_by TEXT, 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    -- If the creator deletes their account, the project stays, but creator becomes NULL
     FOREIGN KEY (created_by) REFERENCES peers(id) ON DELETE SET NULL
   );
 
@@ -28,7 +27,6 @@ export const INITIAL_SCHEMA = `
     role TEXT NOT NULL DEFAULT 'editor', 
     joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (project_id, peer_id),
-    -- CASCADE: If a project is deleted, or a user is deleted, instantly destroy this membership link
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (peer_id) REFERENCES peers(id) ON DELETE CASCADE
   );
@@ -73,18 +71,17 @@ export const INITIAL_SCHEMA = `
   );
 
   -- ==========================================
-  -- 4. FEEDBACK & CHAT ROOMS
+  -- 4. NEW: ENCRYPTED CHAT & ATTACHMENTS
   -- ==========================================
-  CREATE TABLE IF NOT EXISTS chat_messages (
+  CREATE TABLE IF NOT EXISTS project_messages (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
-    sender_id TEXT,
-    content TEXT NOT NULL,
-    attached_file_hash TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    -- SET NULL: Keeps the chat history intact even if the sender deletes their account
-    FOREIGN KEY (sender_id) REFERENCES peers(id) ON DELETE SET NULL
+    sender TEXT NOT NULL,
+    text TEXT,
+    attachment TEXT,
+    attachment_name TEXT,
+    is_edited INTEGER DEFAULT 0,
+    timestamp TEXT NOT NULL
   );
 
   -- ==========================================
