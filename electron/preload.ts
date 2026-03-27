@@ -1,7 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IPCAPI } from './types';
 
-
 const electronAPI: IPCAPI = {
   // Auth
   register: (credentials) => ipcRenderer.invoke('auth:register', credentials),
@@ -10,6 +9,7 @@ const electronAPI: IPCAPI = {
 
   // Projects
   createProject: (data) => ipcRenderer.invoke('project:create', data),
+  joinProject: (data) => ipcRenderer.invoke('project:join', data),
 
   // Projectlist 
   listProjects: (data) => ipcRenderer.invoke('project:list', data),
@@ -42,6 +42,12 @@ const electronAPI: IPCAPI = {
     ipcRenderer.on('sync-refresh', () => callback());
   },
 
+  // Chat
+  getMessages: (data) => ipcRenderer.invoke('chat:get', data),
+  sendMessage: (data) => ipcRenderer.invoke('chat:send', data),
+  editMessage: (data) => ipcRenderer.invoke('chat:edit', data),
+  deleteMessage: (data) => ipcRenderer.invoke('chat:delete', data),
+
   // Security
   getAuditLog: (limit) => ipcRenderer.invoke('security:get-audit-log', limit),
   getStats: () => ipcRenderer.invoke('security:get-stats'),
@@ -61,11 +67,19 @@ const electronAPI: IPCAPI = {
   onPeerDisconnected: (callback) => {
     ipcRenderer.on('peer-disconnected', (_event, peerId) => callback(peerId));
   },
-  onDocumentUpdate: (callback) => {
-    ipcRenderer.on('document-update', (_event, docId) => callback(docId));
-  },
   onUpdateAvailable: (callback) => {
     ipcRenderer.on('update:available', (_event, info) => callback(info));
+  },
+
+  // Live P2P Sync (Upgraded)
+  sendDocumentUpdate: (data) => ipcRenderer.send('doc:send-update', data),
+  onDocumentUpdate: (callback) => {
+    const subscription = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('doc:receive-update', subscription);
+    // Return a cleanup function so React can stop listening when you close the document
+    return () => {
+      ipcRenderer.removeListener('doc:receive-update', subscription);
+    };
   },
 };
 
