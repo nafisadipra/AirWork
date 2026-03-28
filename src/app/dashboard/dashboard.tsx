@@ -6,6 +6,7 @@ import KanbanBoard from './KanbanBoard';
 import Settings from './Settings'; 
 import Documents from './Documents';
 import LocalChat from './LocalChat';
+import Profile from './Profile'; // <--- NEW: IMPORT PROFILE COMPONENT
 
 export default function Dashboard() {
   const [username, setUsername] = useState('User');
@@ -18,8 +19,9 @@ export default function Dashboard() {
   const [selectedProject, setSelectedProject] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('kanban');
 
-  // <--- NEW: GLOBAL CHAT STATE --->
+  // <--- NEW: GLOBAL CHAT & PROFILE STATES --->
   const [showGlobalChat, setShowGlobalChat] = useState(false);
+  const [showProfile, setShowProfile] = useState(false); // <--- NEW: PROFILE STATE
 
   // JOIN MODAL STATES
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
@@ -206,9 +208,9 @@ export default function Dashboard() {
             <div className="space-y-1">
               {/* OVERVIEW BUTTON */}
               <button 
-                onClick={() => { setSelectedProject(null); setShowGlobalChat(false); }}
+                onClick={() => { setSelectedProject(null); setShowGlobalChat(false); setShowProfile(false); }}
                 className={`w-full flex items-center gap-3 px-2 py-1.5 rounded-sm text-sm font-medium transition-none ${
-                  !selectedProject && !showGlobalChat ? 'bg-[#1A2633] text-[#4DA6FF]' : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#E0E0E0]'
+                  !selectedProject && !showGlobalChat && !showProfile ? 'bg-[#1A2633] text-[#4DA6FF]' : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#E0E0E0]'
                 }`}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
@@ -217,9 +219,9 @@ export default function Dashboard() {
               
               {/* NEW: GLOBAL CHAT BUTTON */}
               <button 
-                onClick={() => { setSelectedProject(null); setShowGlobalChat(true); }}
+                onClick={() => { setSelectedProject(null); setShowGlobalChat(true); setShowProfile(false); }}
                 className={`w-full flex items-center gap-3 px-2 py-1.5 rounded-sm text-sm font-medium transition-none ${
-                  !selectedProject && showGlobalChat ? 'bg-[#1A2633] text-[#4DA6FF]' : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#E0E0E0]'
+                  !selectedProject && showGlobalChat && !showProfile ? 'bg-[#1A2633] text-[#4DA6FF]' : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#E0E0E0]'
                 }`}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" /></svg>
@@ -251,6 +253,7 @@ export default function Dashboard() {
                     onClick={() => {
                       setSelectedProject(project);
                       setShowGlobalChat(false);
+                      setShowProfile(false); // <--- NEW: CLOSE PROFILE WHEN CLICKING PROJECT
                       setActiveTab('kanban');
                     }}
                     className={`w-full flex items-center gap-3 px-2 py-1.5 rounded-sm text-sm font-medium transition-none ${
@@ -302,7 +305,11 @@ export default function Dashboard() {
 
         </div>
 
-        <div className="p-4 border-t border-[#2A2A2A] bg-[#0A0A0A] shrink-0">
+        {/* <--- NEW: CLICKABLE PROFILE BADGE ---> */}
+        <button 
+          onClick={() => { setSelectedProject(null); setShowGlobalChat(false); setShowProfile(true); }}
+          className={`w-full p-4 border-t border-[#2A2A2A] hover:bg-[#121212] shrink-0 text-left transition-none cursor-pointer ${showProfile ? 'bg-[#121212]' : 'bg-[#0A0A0A]'}`}
+        >
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-[#0066FF] flex items-center justify-center text-sm font-bold text-white rounded-sm uppercase">{username.charAt(0)}</div>
             <div className="flex-1 text-left">
@@ -310,7 +317,7 @@ export default function Dashboard() {
               <div className="text-[11px] text-[#808080] font-medium">Administrator</div>
             </div>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* ==================== MAIN CONTENT AREA ==================== */}
@@ -320,14 +327,14 @@ export default function Dashboard() {
         <header className="h-14 bg-[#121212] border-b border-[#2A2A2A] flex items-center justify-between px-6 shrink-0">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-bold text-[#E0E0E0]">
-              {selectedProject ? selectedProject.name : (showGlobalChat ? 'Global Watercooler' : 'Dashboard')}
+              {showProfile ? 'Profile & Security' : selectedProject ? selectedProject.name : (showGlobalChat ? 'Global Watercooler' : 'Dashboard')}
             </h2>
-            {selectedProject && (
+            {selectedProject && !showProfile && (
               <span className="px-1.5 py-0.5 bg-green-900/30 text-green-500 border border-green-800 text-[10px] font-bold uppercase tracking-wider rounded-sm ml-2">
                 {selectedProject.role}
               </span>
             )}
-            {!selectedProject && showGlobalChat && (
+            {!selectedProject && showGlobalChat && !showProfile && (
               <span className="px-1.5 py-0.5 bg-[#0066FF]/20 text-[#4DA6FF] border border-[#0066FF]/30 text-[10px] font-bold uppercase tracking-wider rounded-sm ml-2">
                 Public Network
               </span>
@@ -336,7 +343,18 @@ export default function Dashboard() {
         </header>
 
         <main className="flex-1 overflow-hidden flex flex-col bg-[#0A0A0A]">
-          {!selectedProject ? (
+          {/* <--- NEW: RENDER PROFILE CONDITIONAL ---> */}
+          {showProfile ? (
+            <Profile 
+              currentUsername={username} 
+              onLogout={async () => {
+                const api = (window as any).electronAPI;
+                await api.logout();
+                localStorage.removeItem('airwork_user');
+                window.location.href = '/'; 
+              }} 
+            />
+          ) : !selectedProject ? (
             // <--- RENDER EITHER GLOBAL CHAT OR OVERVIEW GRID --->
             showGlobalChat ? (
               <div className="flex-1 p-6 overflow-hidden">
@@ -418,7 +436,8 @@ export default function Dashboard() {
                 {activeTab === 'chat' && (
                   <LocalChat 
                     selectedProject={selectedProject} 
-                    username={username} 
+                    username={username}
+                    members={members} 
                   />
                 )}
                 
