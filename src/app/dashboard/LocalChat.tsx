@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 interface LocalChatProps {
   selectedProject: any;
   username: string;
+  members?: any[]; // <--- ADDED: Allow chat to receive the members list
 }
 
 interface ChatMessage {
@@ -18,7 +19,7 @@ interface ChatMessage {
   attachmentName?: string | null;
 }
 
-export default function LocalChat({ selectedProject, username }: LocalChatProps) {
+export default function LocalChat({ selectedProject, username, members }: LocalChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   
@@ -41,6 +42,13 @@ export default function LocalChat({ selectedProject, username }: LocalChatProps)
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // <--- ADDED: Helper to find the alias --->
+  const getDisplayName = (senderUsername: string) => {
+    if (!members) return senderUsername;
+    const member = members.find(m => m.username === senderUsername);
+    return member?.nickname || senderUsername;
+  };
 
   // --- ACTIONS ---
 
@@ -150,7 +158,8 @@ export default function LocalChat({ selectedProject, username }: LocalChatProps)
                 
                 <div className="flex items-baseline gap-2 mb-1">
                   <span className="text-[10px] font-bold text-[#808080] uppercase tracking-wider">
-                    {msg.sender}
+                    {/* <--- CHANGED: Render Alias ---> */}
+                    {getDisplayName(msg.sender)}
                   </span>
                   <span className="text-[9px] text-[#4d4d4d]">
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -193,7 +202,7 @@ export default function LocalChat({ selectedProject, username }: LocalChatProps)
                         : 'bg-[#2A2A2A] text-[#E0E0E0] rounded-tl-none border border-[#333]'
                     }`}>
                       
-                      {/* <--- NEW: DOWNLOADABLE ATTACHMENTS ---> */}
+                      {/* DOWNLOADABLE ATTACHMENTS */}
                       {msg.attachment && (
                         <div className="mb-2">
                            {msg.attachment.startsWith('data:image') ? (
