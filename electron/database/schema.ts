@@ -59,6 +59,7 @@ export const INITIAL_SCHEMA = `
     FOREIGN KEY (assigned_to) REFERENCES peers(id) ON DELETE SET NULL
   );
 
+  -- The "main" branch of your documents
   CREATE TABLE IF NOT EXISTS documents (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL, 
@@ -70,8 +71,20 @@ export const INITIAL_SCHEMA = `
     FOREIGN KEY (last_edited_by) REFERENCES peers(id) ON DELETE SET NULL
   );
 
+  -- <--- NEW: ISOLATED DOCUMENT BRANCHES --->
+  CREATE TABLE IF NOT EXISTS document_branches (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL,
+    branch_name TEXT NOT NULL,
+    yjs_state BLOB,
+    created_by TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES peers(id) ON DELETE SET NULL
+  );
+
   -- ==========================================
-  -- 4. NEW: ENCRYPTED CHAT & ATTACHMENTS
+  -- 4. ENCRYPTED CHAT & ATTACHMENTS
   -- ==========================================
   CREATE TABLE IF NOT EXISTS project_messages (
     id TEXT PRIMARY KEY,
