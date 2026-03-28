@@ -29,6 +29,11 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
     return colors[index % colors.length];
   };
 
+  // <--- ADDED: Helper to extract the alias --->
+  const getMemberDisplayName = (member: any) => {
+    return member.nickname || member.username;
+  };
+
   const handleCreateTask = async (e: React.FormEvent, status: string) => {
     e.preventDefault();
     if (!newTaskTitle.trim() || !selectedProject) return;
@@ -39,7 +44,6 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
         projectId: selectedProject.id, 
         title: newTaskTitle, 
         status,
-        // <--- THIS IS THE MISSING DATA! --->
         assigneeId: newTaskAssignee || null,
         startDate: newTaskStartDate || null,
         dueDate: newTaskDueDate || null
@@ -123,8 +127,9 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
                     {task.due_date && <span className="text-blue-500/80">Due: {new Date(task.due_date).toLocaleDateString()}</span>}
                   </div>
                   {members.length > 0 && (
-                    <div title="Assigned Team Member" className={`w-5 h-5 rounded-full ${getAvatarColor(index)} flex items-center justify-center text-[9px] text-white font-bold shadow-sm uppercase`}>
-                      {members[index % members.length].username.charAt(0)}
+                    <div title={getMemberDisplayName(members[index % members.length])} className={`w-5 h-5 rounded-full ${getAvatarColor(index)} flex items-center justify-center text-[9px] text-white font-bold shadow-sm uppercase`}>
+                      {/* <--- CHANGED: Extract the first letter of the Alias ---> */}
+                      {getMemberDisplayName(members[index % members.length]).charAt(0)}
                     </div>
                   )}
                 </div>
@@ -140,7 +145,8 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
                 {col.id === 'todo' && (
                   <select value={newTaskAssignee} onChange={(e) => setNewTaskAssignee(e.target.value)} className="w-full bg-[#0A0A0A] border border-[#2A2A2A] text-[#A0A0A0] text-[10px] rounded-sm px-1 py-1.5 outline-none mb-2">
                     <option value="">Assign to...</option>
-                    {members.map(m => <option key={m.id} value={m.id}>{m.username}</option>)}
+                    {/* <--- CHANGED: Display Alias in dropdown ---> */}
+                    {members.map(m => <option key={m.id} value={m.id}>{getMemberDisplayName(m)}</option>)}
                   </select>
                 )}
 
