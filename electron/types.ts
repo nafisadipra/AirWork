@@ -33,6 +33,12 @@ export interface IPCAPI {
   createProject: (data: { name: string; userId: string }) => Promise<{ success: boolean; projectId?: string; error?: string }>;
   joinProject: (data: { token: string; userId: string }) => Promise<{ success: boolean; error?: string }>;
 
+  // Profile
+  getProfile: (userId: string) => Promise<{ success: boolean; profile?: any; aliases?: any[]; error?: string }>;
+  updateProfile: (data: { userId: string; username: string; email: string; about: string }) => Promise<{ success: boolean; error?: string }>;
+  updateProjectAlias: (data: { userId: string; projectId: string; nickname: string }) => Promise<{ success: boolean; error?: string }>;
+  deleteProfile: (userId: string) => Promise<{ success: boolean; error?: string }>;
+
   // Projectlists
   listProjects: (data: { userId: string }) => Promise<{ success: boolean; projects?: any[]; error?: string }>;
 
@@ -58,6 +64,7 @@ export interface IPCAPI {
   openDocument: (docId: string) => Promise<DocumentResult>;
   listDocuments: (data: { projectId: string }) => Promise<DocumentResult>;
   deleteDocument: (docId: string) => Promise<{ success: boolean }>;
+  exportPdf: (data: { html: string; title: string }) => Promise<{ success: boolean; error?: string }>;
 
   // <--- NEW: Document Save/Load & Delete Branch --->
   loadDocument: (docId: string) => Promise<{ success: boolean; state?: number[]; error?: string }>;
