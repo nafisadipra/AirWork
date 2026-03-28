@@ -31,6 +31,16 @@ const electronAPI: IPCAPI = {
   listDocuments: (data) => ipcRenderer.invoke('doc:list', data),
   deleteDocument: (docId) => ipcRenderer.invoke('doc:delete', docId),
 
+  // <--- NEW: Document Save/Load & Delete Branch --->
+  loadDocument: (docId) => ipcRenderer.invoke('doc:load', docId),
+  saveDocument: (data) => ipcRenderer.invoke('doc:save', data),
+  deleteBranch: (data) => ipcRenderer.invoke('doc:deleteBranch', data),
+
+  // Document Branching (NEW)
+  createBranch: (data) => ipcRenderer.invoke('doc:createBranch', data),
+  listBranches: (data) => ipcRenderer.invoke('doc:listBranches', data),
+  mergeBranch: (data) => ipcRenderer.invoke('doc:mergeBranch', data),
+
   // Peers
   listPeers: () => ipcRenderer.invoke('peers:list'),
   trustPeer: (peerId) => ipcRenderer.invoke('peers:trust', peerId),
