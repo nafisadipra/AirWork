@@ -7,6 +7,12 @@ const electronAPI: IPCAPI = {
   login: (credentials) => ipcRenderer.invoke('auth:login', credentials),
   logout: () => ipcRenderer.invoke('auth:logout'),
 
+  // Profile
+  getProfile: (userId) => ipcRenderer.invoke('profile:get', userId),
+  updateProfile: (data) => ipcRenderer.invoke('profile:update', data),
+  updateProjectAlias: (data) => ipcRenderer.invoke('profile:updateAlias', data),
+  deleteProfile: (userId) => ipcRenderer.invoke('profile:delete', userId),
+
   // Projects
   createProject: (data) => ipcRenderer.invoke('project:create', data),
   joinProject: (data) => ipcRenderer.invoke('project:join', data),
@@ -30,6 +36,7 @@ const electronAPI: IPCAPI = {
   openDocument: (docId) => ipcRenderer.invoke('doc:open', docId),
   listDocuments: (data) => ipcRenderer.invoke('doc:list', data),
   deleteDocument: (docId) => ipcRenderer.invoke('doc:delete', docId),
+  exportPdf: (data) => ipcRenderer.invoke('doc:exportPdf', data),
 
   // <--- NEW: Document Save/Load & Delete Branch --->
   loadDocument: (docId) => ipcRenderer.invoke('doc:load', docId),
