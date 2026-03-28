@@ -59,6 +59,16 @@ export interface IPCAPI {
   listDocuments: (data: { projectId: string }) => Promise<DocumentResult>;
   deleteDocument: (docId: string) => Promise<{ success: boolean }>;
 
+  // <--- NEW: Document Save/Load & Delete Branch --->
+  loadDocument: (docId: string) => Promise<{ success: boolean; state?: number[]; error?: string }>;
+  saveDocument: (data: { docId: string; state: number[] }) => Promise<{ success: boolean; error?: string }>;
+  deleteBranch: (data: { branchId: string }) => Promise<{ success: boolean; error?: string }>;
+
+  // Document Branching (NEW)
+  createBranch: (data: { documentId: string; branchName: string; userId: string }) => Promise<{ success: boolean; branchId?: string; error?: string }>;
+  listBranches: (data: { documentId: string }) => Promise<{ success: boolean; branches?: any[]; error?: string }>;
+  mergeBranch: (data: { branchId: string; documentId: string }) => Promise<{ success: boolean; error?: string }>;
+
   // Peers & P2P
   listPeers: () => Promise<{ success: boolean; peers?: any[] }>;
   trustPeer: (peerId: string) => Promise<{ success: boolean }>;
