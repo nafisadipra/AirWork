@@ -53,6 +53,8 @@ function setupIpcHandlers() {
             
             if (success) {
                 const db = activeDatabase.getDb();
+                try { db.exec(`ALTER TABLE peers ADD COLUMN about_me TEXT;`); } catch(e) {}
+                try { db.exec(`ALTER TABLE project_members ADD COLUMN nickname TEXT;`); } catch(e) {}
                 const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(credentials.userId) as any;
                 
                 if (userRecord) {
@@ -245,7 +247,7 @@ function setupIpcHandlers() {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
             const members = activeDatabase.getDb().prepare(`
-                SELECT p.id, p.username, pm.role, pm.joined_at 
+                SELECT p.id, p.username, pm.role, pm.joined_at, pm.nickname 
                 FROM peers p
                 JOIN project_members pm ON p.id = pm.peer_id
                 WHERE pm.project_id = ?
@@ -446,6 +448,56 @@ function setupIpcHandlers() {
         }
     });
 
+    // <--- NATIVE PDF EXPORT ENGINE --->
+    ipcMain.handle('doc:exportPdf', async (_event, { html, title }) => {
+        try {
+            const printWindow = new BrowserWindow({
+                show: false,
+                webPreferences: { nodeIntegration: false, contextIsolation: true }
+            });
+            const formattedHtml = `
+                <html>
+                <head>
+                  <style>
+                    body { font-family: Arial, sans-serif; padding: 40px; color: black; background: white; }
+                    h1 { text-align: center; border-bottom: 1px solid #ccc; padding-bottom: 10px; color: #333; }
+                    ul { list-style-type: disc; margin-left: 20px; }
+                    ol { list-style-type: decimal; margin-left: 20px; }
+                    blockquote { border-left: 4px solid #ccc; padding-left: 10px; color: #666; }
+                    pre { background: #f4f4f4; padding: 10px; border-radius: 4px; color: black; }
+                  </style>
+                </head>
+                <body>
+                  <h1>${title}</h1>
+                  ${html}
+                </body>
+                </html>
+            `;
+            await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(formattedHtml)}`);
+            
+            const pdfData = await printWindow.webContents.printToPDF({
+                printBackground: true,
+                pageSize: 'A4'
+            });
+            
+            const { dialog } = require('electron');
+            const { filePath } = await dialog.showSaveDialog({
+                title: 'Save PDF',
+                defaultPath: `${title}.pdf`,
+                filters: [{ name: 'PDFs', extensions: ['pdf'] }]
+            });
+
+            if (filePath) {
+                require('fs').writeFileSync(filePath, pdfData);
+            }
+            printWindow.close();
+            return { success: true };
+        } catch (error: any) {
+            console.error('PDF Export Error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.on('doc:send-update', (_event, { docId, update }) => {
         if (p2pEngine) p2pEngine.broadcast({ type: 'SYNC_DOC_UPDATE', docId, update });
     });
@@ -492,6 +544,76 @@ function setupIpcHandlers() {
             if (p2pEngine) p2pEngine.broadcast({ type: 'SYNC_CHAT_DELETE', id });
             return { success: true };
         } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // ==========================================
+    // 6. PROFILE & SETTINGS
+    // ==========================================
+    ipcMain.handle('profile:get', async (_event, userId) => {
+        if (!activeDatabase) return { success: false, error: 'Database not active' };
+        try {
+            const db = activeDatabase.getDb();
+            const profile = db.prepare(`SELECT id, username, email, about_me FROM peers WHERE username = ?`).get(userId) as any;
+            
+            // Get user's project-specific aliases
+            const aliases = db.prepare(`
+                SELECT p.id as project_id, p.name as project_name, pm.nickname 
+                FROM projects p
+                JOIN project_members pm ON p.id = pm.project_id
+                WHERE pm.peer_id = ?
+            `).all(profile.id);
+
+            return { success: true, profile, aliases };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('profile:update', async (_event, { userId, username, email, about }) => {
+        if (!activeDatabase) return { success: false, error: 'Database not active' };
+        try {
+            const db = activeDatabase.getDb();
+            db.prepare(`UPDATE peers SET username = ?, email = ?, about_me = ? WHERE username = ?`).run(username, email, about, userId);
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('profile:updateAlias', async (_event, { userId, projectId, nickname }) => {
+        if (!activeDatabase) return { success: false, error: 'Database not active' };
+        try {
+            const db = activeDatabase.getDb();
+            const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(userId) as any;
+            db.prepare(`UPDATE project_members SET nickname = ? WHERE peer_id = ? AND project_id = ?`).run(nickname, userRecord.id, projectId);
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('profile:delete', async (_event, userId) => {
+        if (!activeDatabase) return { success: false, error: 'Database not active' };
+        try {
+            // Close DB
+            activeDatabase.close();
+            activeDatabase = null;
+            if (p2pEngine) { p2pEngine.stop(); p2pEngine = null; }
+
+            // Delete the physical files to completely wipe the profile
+            const userDataPath = app.getPath('userData');
+            const fs = require('fs');
+            const dbFile = path.join(userDataPath, `airwork_${userId}.db`);
+            const keysFile = `${dbFile}.keys.json`;
+
+            if (fs.existsSync(dbFile)) fs.unlinkSync(dbFile);
+            if (fs.existsSync(keysFile)) fs.unlinkSync(keysFile);
+
+            return { success: true };
+        } catch (error: any) {
+            console.error(error);
             return { success: false, error: error.message };
         }
     });
