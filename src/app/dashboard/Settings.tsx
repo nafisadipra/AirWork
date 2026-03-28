@@ -1,4 +1,3 @@
-// src/app/dashboard/Settings.tsx
 'use client';
 
 interface SettingsProps {
