@@ -13,12 +13,15 @@ export default function Documents({ selectedProject, username }: DocumentsProps)
   const [isCreating, setIsCreating] = useState(false);
   const [newDocTitle, setNewDocTitle] = useState('');
   
-  // This will hold the document when a user clicks on it to open the editor
   const [activeDoc, setActiveDoc] = useState<any>(null); 
+
+  const [branches, setBranches] = useState<any[]>([]);
+  const [activeBranch, setActiveBranch] = useState<any>(null);
+  const [isBranching, setIsBranching] = useState(false);
+  const [newBranchName, setNewBranchName] = useState('');
 
   const fetchDocuments = async () => {
     try {
-      // We will wire up the real SQLite fetch in the next step!
       const api = (window as any).electronAPI;
       const result = await api.listDocuments({ projectId: selectedProject.id });
       if (result.success && result.documents) {
@@ -29,9 +32,28 @@ export default function Documents({ selectedProject, username }: DocumentsProps)
     }
   };
 
+  const fetchBranches = async (docId: string) => {
+    try {
+      const api = (window as any).electronAPI;
+      const result = await api.listBranches({ documentId: docId });
+      if (result.success && result.branches) {
+        setBranches(result.branches);
+      }
+    } catch (error) {
+      console.error("Failed to fetch branches", error);
+    }
+  };
+
   useEffect(() => {
     if (selectedProject) fetchDocuments();
   }, [selectedProject]);
+
+  useEffect(() => {
+    if (activeDoc) {
+      fetchBranches(activeDoc.id);
+      setActiveBranch(null); 
+    }
+  }, [activeDoc]);
 
   const handleCreateDoc = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,14 +70,53 @@ export default function Documents({ selectedProject, username }: DocumentsProps)
       if (result.success) {
         setNewDocTitle('');
         setIsCreating(false);
-        fetchDocuments(); // Refresh the list
+        fetchDocuments(); 
       }
     } catch (error) {
       console.error("Failed to create document", error);
     }
   };
 
-  // If a document is open, show the Editor (Placeholder for now)
+  const handleCreateBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBranchName.trim() || !activeDoc) return;
+
+    try {
+      const api = (window as any).electronAPI;
+      const result = await api.createBranch({
+        documentId: activeDoc.id,
+        branchName: newBranchName.trim(),
+        userId: username
+      });
+
+      if (result.success) {
+        setNewBranchName('');
+        setIsBranching(false);
+        fetchBranches(activeDoc.id);
+        setActiveBranch({ id: result.branchId, branch_name: newBranchName.trim() });
+      }
+    } catch (error) {
+      console.error("Failed to create branch", error);
+    }
+  };
+
+  // <--- NEW: MANUAL BRANCH DELETION --->
+  const handleDeleteBranch = async () => {
+    if (!activeBranch) return;
+    if (!confirm(`Are you sure you want to permanently delete the branch "${activeBranch.branch_name}"?`)) return;
+
+    try {
+      const api = (window as any).electronAPI;
+      const res = await api.deleteBranch({ branchId: activeBranch.id });
+      if (res.success) {
+        setActiveBranch(null); // Switch back to main
+        fetchBranches(activeDoc.id); // Refresh the dropdown
+      }
+    } catch(e) {
+      console.error("Failed to delete branch", e);
+    }
+  };
+
   if (activeDoc) {
     return (
       <div className="flex flex-col h-full bg-[#121212] rounded-sm border border-[#2A2A2A] animate-in fade-in zoom-in-95 duration-200">
@@ -64,20 +125,80 @@ export default function Documents({ selectedProject, username }: DocumentsProps)
             <button onClick={() => setActiveDoc(null)} className="text-[#666] hover:text-white transition-colors">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
             </button>
-            <h3 className="text-sm font-bold text-white">{activeDoc.title}</h3>
+            
+            <div className="flex items-center gap-2 bg-[#0A0A0A] border border-[#2A2A2A] rounded-sm px-2 py-1">
+              <svg className="w-3.5 h-3.5 text-[#4DA6FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7l-2 2m2-2l2 2m4 4l2-2m-2 2l-2-2" /></svg>
+              <select
+                className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer"
+                value={activeBranch ? activeBranch.id : 'main'}
+                onChange={(e) => {
+                  if (e.target.value === 'main') setActiveBranch(null);
+                  else setActiveBranch(branches.find(b => b.id === e.target.value));
+                }}
+              >
+                <option value="main" className="bg-[#1A1A1A]">main</option>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id} className="bg-[#1A1A1A]">{b.branch_name}</option>
+                ))}
+              </select>
+            </div>
+            
+            {/* <--- NEW: TRASH ICON TO DELETE ACTIVE BRANCH ---> */}
+            {activeBranch && (
+              <button onClick={handleDeleteBranch} className="text-[#666] hover:text-red-500 transition-colors ml-1" title="Delete Branch">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </button>
+            )}
+            
+            {!isBranching ? (
+              <button onClick={() => setIsBranching(true)} className="text-[10px] font-bold text-[#666] hover:text-[#4DA6FF] uppercase tracking-wider transition-colors ml-2">
+                + New Branch
+              </button>
+            ) : (
+              <form onSubmit={handleCreateBranch} className="flex items-center gap-1 ml-2">
+                <input 
+                  autoFocus
+                  type="text" 
+                  value={newBranchName}
+                  onChange={(e) => setNewBranchName(e.target.value)}
+                  placeholder="Branch name..."
+                  className="bg-[#1A1A1A] border border-[#0066FF] rounded-sm px-2 py-0.5 text-xs text-white focus:outline-none w-24"
+                />
+                <button type="submit" className="text-[10px] bg-[#0066FF] text-white px-2 py-0.5 rounded-sm font-bold uppercase">Create</button>
+                <button type="button" onClick={() => setIsBranching(false)} className="text-[10px] text-[#666] hover:text-white px-1 font-bold uppercase">Cancel</button>
+              </form>
+            )}
           </div>
-          <span className="text-[10px] text-[#0066FF] font-bold uppercase tracking-wider bg-[#0066FF]/10 px-2 py-1 rounded-sm">
-            Live Syncing
-          </span>
+          
+          <div className="flex items-center gap-2">
+            {activeBranch && (
+              <span className="text-[10px] text-yellow-500 font-bold uppercase tracking-wider bg-yellow-500/10 px-2 py-1 rounded-sm border border-yellow-500/20">
+                Isolated Draft
+              </span>
+            )}
+            <span className="text-[10px] text-[#0066FF] font-bold uppercase tracking-wider bg-[#0066FF]/10 px-2 py-1 rounded-sm">
+              Live Syncing
+            </span>
+          </div>
         </div>
         <div className="flex-1 p-8 overflow-y-auto">
-          <Editor documentId={activeDoc.id} username={username} />
+          <Editor 
+            key={activeBranch ? activeBranch.id : activeDoc.id} 
+            documentId={activeDoc.id} 
+            branchId={activeBranch ? activeBranch.id : null}
+            username={username} 
+            onMergeSuccess={() => {
+              // <--- FIX: AUTO REDIRECT TO MAIN AFTER MERGE --->
+              alert(`Merged successfully! Switching to main branch.`);
+              setActiveBranch(null); 
+              fetchBranches(activeDoc.id);
+            }}
+          />
         </div>
       </div>
     );
   }
 
-  // Otherwise, show the Document List
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-300">
       <div className="flex items-center justify-between mb-6">
