@@ -66,15 +66,21 @@ export interface IPCAPI {
   deleteDocument: (docId: string) => Promise<{ success: boolean }>;
   exportPdf: (data: { html: string; title: string }) => Promise<{ success: boolean; error?: string }>;
 
-  // <--- NEW: Document Save/Load & Delete Branch --->
+  // Document Save/Load & Delete Branch
   loadDocument: (docId: string) => Promise<{ success: boolean; state?: number[]; error?: string }>;
   saveDocument: (data: { docId: string; state: number[] }) => Promise<{ success: boolean; error?: string }>;
   deleteBranch: (data: { branchId: string }) => Promise<{ success: boolean; error?: string }>;
 
-  // Document Branching (NEW)
+  // Document Branching 
   createBranch: (data: { documentId: string; branchName: string; userId: string }) => Promise<{ success: boolean; branchId?: string; error?: string }>;
   listBranches: (data: { documentId: string }) => Promise<{ success: boolean; branches?: any[]; error?: string }>;
   mergeBranch: (data: { branchId: string; documentId: string }) => Promise<{ success: boolean; error?: string }>;
+  forceOverwriteBranch: (data: { branchId: string; documentId: string }) => Promise<{ success: boolean; error?: string }>;
+
+  // <--- UPGRADED: Added HTML string to History Log --->
+  saveVersion: (data: { documentId: string; userId: string; message: string; state: number[]; html: string }) => Promise<{ success: boolean; error?: string }>;
+  listVersions: (data: { documentId: string }) => Promise<{ success: boolean; versions?: any[]; error?: string }>;
+  restoreVersion: (data: { documentId: string; versionId: string }) => Promise<{ success: boolean; state?: number[]; html?: string; error?: string }>;
 
   // Peers & P2P
   listPeers: () => Promise<{ success: boolean; peers?: any[] }>;
@@ -97,18 +103,17 @@ export interface IPCAPI {
   createBackup: (password: string) => Promise<{ success: boolean; path?: string }>;
   restoreBackup: (backupPath: string, password: string) => Promise<{ success: boolean }>;
 
-  // Event Listeners (Main to Renderer)
+  // Event Listeners 
   onPeerDiscovered: (callback: (peerId: string) => void) => void;
   onPeerConnected: (callback: (peerId: string) => void) => void;
   onPeerDisconnected: (callback: (peerId: string) => void) => void;
   onUpdateAvailable: (callback: (info: any) => void) => void;
 
-  // Live P2P Sync (Upgraded)
+  // Live P2P Sync 
   sendDocumentUpdate: (data: { docId: string, update: number[] }) => void;
   onDocumentUpdate: (callback: (data: { docId: string, update: number[] }) => void) => () => void;
 }
 
-// Extend the global Window object so Next.js recognizes the API
 declare global {
   interface Window {
     electronAPI: IPCAPI;
