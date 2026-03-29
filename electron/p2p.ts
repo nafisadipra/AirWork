@@ -17,6 +17,9 @@ export class P2PEngine extends EventEmitter {
     private knownPeers: Map<string, any> = new Map();
     private activeConnections: Map<string, net.Socket> = new Map();
 
+    // <--- ADDED: Tracker for the broadcast timer --->
+    private broadcastInterval: NodeJS.Timeout | null = null;
+
     constructor(peerId: string, username: string) {
         super();
         this.peerId = peerId;
@@ -56,9 +59,14 @@ export class P2PEngine extends EventEmitter {
                 }
             });
 
-            setInterval(() => {
+            // <--- ADDED: Assign the interval to our tracker variable and add a safety try/catch --->
+            this.broadcastInterval = setInterval(() => {
                 const msg = Buffer.from(`AIRWORK:HELLO:${this.peerId}:${this.username}:${this.tcpPort}`);
-                this.udpSocket.send(msg, 0, msg.length, BROADCAST_PORT, BROADCAST_ADDR);
+                try {
+                    this.udpSocket.send(msg, 0, msg.length, BROADCAST_PORT, BROADCAST_ADDR);
+                } catch (error) {
+                    // Socket is likely closed, safely ignore to prevent crash
+                }
             }, 3000);
             
             console.log('[P2P] 📢 Shouting presence to the local network...');
@@ -153,7 +161,15 @@ export class P2PEngine extends EventEmitter {
     }
 
     stop() {
-        if (this.udpSocket) this.udpSocket.close();
+        // <--- ADDED: Clear the interval before closing the socket --->
+        if (this.broadcastInterval) {
+            clearInterval(this.broadcastInterval);
+            this.broadcastInterval = null;
+        }
+
+        if (this.udpSocket) {
+            try { this.udpSocket.close(); } catch(e) {}
+        }
         if (this.tcpServer) this.tcpServer.close();
         this.activeConnections.forEach(socket => socket.destroy());
     }
