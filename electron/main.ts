@@ -42,11 +42,7 @@ function createWindow() {
 }
 
 function setupIpcHandlers() {
-    // ==========================================
-    // 1. AUTHENTICATION & INITIALIZATION
-    // ==========================================
     ipcMain.handle('auth:login', async (_event, credentials) => {
-        console.log('Login attempt for:', credentials.userId);
         try {
             activeDatabase = new EncryptedDatabase(credentials.userId);
             const success = await activeDatabase.initialize(credentials.password, false); 
@@ -55,6 +51,9 @@ function setupIpcHandlers() {
                 const db = activeDatabase.getDb();
                 try { db.exec(`ALTER TABLE peers ADD COLUMN about_me TEXT;`); } catch(e) {}
                 try { db.exec(`ALTER TABLE project_members ADD COLUMN nickname TEXT;`); } catch(e) {}
+                // <--- FIX: Ensure existing databases add the new HTML column without crashing --->
+                try { db.exec(`ALTER TABLE document_versions ADD COLUMN html TEXT;`); } catch(e) {}
+                
                 const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(credentials.userId) as any;
                 
                 if (userRecord) {
@@ -65,7 +64,6 @@ function setupIpcHandlers() {
                         if (mainWindow) mainWindow.webContents.send('peer-discovered', peerData);
                     });
 
-                    // P2P SYNC ENGINE
                     p2pEngine.on('message', (payload) => {
                         if (!activeDatabase) return;
                         const db = activeDatabase.getDb();
@@ -208,9 +206,6 @@ function setupIpcHandlers() {
         return { success: true };
     });
 
-    // ==========================================
-    // 2. PROJECTS & WORKSPACES
-    // ==========================================
     ipcMain.handle('project:create', async (_event, { name, userId }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
@@ -284,9 +279,6 @@ function setupIpcHandlers() {
         }
     });
 
-    // ==========================================
-    // 3. TASKS
-    // ==========================================
     ipcMain.handle('task:list', async (_event, { projectId }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
@@ -341,9 +333,6 @@ function setupIpcHandlers() {
         }
     });
 
-    // ==========================================
-    // 4. DOCUMENTS & BRANCHING
-    // ==========================================
     ipcMain.handle('doc:create', async (_event, { projectId, title }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
@@ -365,7 +354,6 @@ function setupIpcHandlers() {
         }
     });
 
-    // <--- NEW: Document Save & Load Logic --->
     ipcMain.handle('doc:load', async (_event, docId) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
@@ -437,6 +425,23 @@ function setupIpcHandlers() {
         }
     });
 
+    ipcMain.handle('doc:forceOverwriteBranch', async (_event, { branchId, documentId }) => {
+        if (!activeDatabase) return { success: false, error: 'Database not active' };
+        try {
+            const db = activeDatabase.getDb();
+            const branch = db.prepare(`SELECT yjs_state FROM document_branches WHERE id = ?`).get(branchId) as any;
+            if (!branch) throw new Error("Branch not found");
+
+            // We completely bypass the Yjs merge and ruthlessly replace the main document's state
+            db.prepare(`UPDATE documents SET yjs_state = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(branch.yjs_state, documentId);
+            
+            if (mainWindow) mainWindow.webContents.send('sync-refresh');
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('doc:deleteBranch', async (_event, { branchId }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
@@ -448,7 +453,64 @@ function setupIpcHandlers() {
         }
     });
 
-    // <--- NATIVE PDF EXPORT ENGINE --->
+    // <--- UPGRADED: Save and Restore now handle the HTML string directly! --->
+    ipcMain.handle('doc:saveVersion', async (_event, { documentId, userId, message, state, html }) => {
+        if (!activeDatabase) return { success: false, error: 'Database not active' };
+        try {
+            const versionId = uuidv4();
+            const db = activeDatabase.getDb();
+            const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(userId) as any;
+            const buffer = Buffer.from(state);
+            
+            db.prepare(`
+                INSERT INTO document_versions (id, document_id, message, yjs_state, created_by, html) 
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).run(versionId, documentId, message, buffer, userRecord?.id || null, html || '');
+
+            return { success: true };
+        } catch (error: any) {
+            console.error('Failed to save version:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('doc:listVersions', async (_event, { documentId }) => {
+        if (!activeDatabase) return { success: false, error: 'Database not active' };
+        try {
+            const db = activeDatabase.getDb();
+            const versions = db.prepare(`
+                SELECT dv.id, dv.message, dv.created_at, p.username as creator_name
+                FROM document_versions dv
+                LEFT JOIN peers p ON dv.created_by = p.id
+                WHERE dv.document_id = ?
+                ORDER BY dv.created_at DESC
+            `).all(documentId);
+            return { success: true, versions };
+        } catch (error: any) {
+            console.error('Failed to list versions:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('doc:restoreVersion', async (_event, { documentId, versionId }) => {
+        if (!activeDatabase) return { success: false, error: 'Database not active' };
+        try {
+            const db = activeDatabase.getDb();
+            const record = db.prepare(`SELECT yjs_state, html FROM document_versions WHERE id = ? AND document_id = ?`).get(versionId, documentId) as any;
+            
+            if (record) {
+                return { 
+                    success: true, 
+                    state: record.yjs_state ? Array.from(new Uint8Array(record.yjs_state)) : undefined,
+                    html: record.html
+                };
+            }
+            return { success: false, error: 'Version not found' };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('doc:exportPdf', async (_event, { html, title }) => {
         try {
             const printWindow = new BrowserWindow({
@@ -502,9 +564,6 @@ function setupIpcHandlers() {
         if (p2pEngine) p2pEngine.broadcast({ type: 'SYNC_DOC_UPDATE', docId, update });
     });
 
-    // ==========================================
-    // 5. CHAT
-    // ==========================================
     ipcMain.handle('chat:get', async (_event, { projectId }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
@@ -548,16 +607,12 @@ function setupIpcHandlers() {
         }
     });
 
-    // ==========================================
-    // 6. PROFILE & SETTINGS
-    // ==========================================
     ipcMain.handle('profile:get', async (_event, userId) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
             const db = activeDatabase.getDb();
             const profile = db.prepare(`SELECT id, username, email, about_me FROM peers WHERE username = ?`).get(userId) as any;
             
-            // Get user's project-specific aliases
             const aliases = db.prepare(`
                 SELECT p.id as project_id, p.name as project_name, pm.nickname 
                 FROM projects p
@@ -597,12 +652,10 @@ function setupIpcHandlers() {
     ipcMain.handle('profile:delete', async (_event, userId) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
         try {
-            // Close DB
             activeDatabase.close();
             activeDatabase = null;
             if (p2pEngine) { p2pEngine.stop(); p2pEngine = null; }
 
-            // Delete the physical files to completely wipe the profile
             const userDataPath = app.getPath('userData');
             const fs = require('fs');
             const dbFile = path.join(userDataPath, `airwork_${userId}.db`);
