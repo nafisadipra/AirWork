@@ -38,15 +38,21 @@ const electronAPI: IPCAPI = {
   deleteDocument: (docId) => ipcRenderer.invoke('doc:delete', docId),
   exportPdf: (data) => ipcRenderer.invoke('doc:exportPdf', data),
 
-  // <--- NEW: Document Save/Load & Delete Branch --->
+  // Document Save/Load & Delete Branch --->
   loadDocument: (docId) => ipcRenderer.invoke('doc:load', docId),
   saveDocument: (data) => ipcRenderer.invoke('doc:save', data),
   deleteBranch: (data) => ipcRenderer.invoke('doc:deleteBranch', data),
 
-  // Document Branching (NEW)
+  // Document Branching 
   createBranch: (data) => ipcRenderer.invoke('doc:createBranch', data),
   listBranches: (data) => ipcRenderer.invoke('doc:listBranches', data),
   mergeBranch: (data) => ipcRenderer.invoke('doc:mergeBranch', data),
+  forceOverwriteBranch: (data) => ipcRenderer.invoke('doc:forceOverwriteBranch', data),
+
+  // <--- NEW: Document History --->
+  saveVersion: (data) => ipcRenderer.invoke('doc:saveVersion', data),
+  listVersions: (data) => ipcRenderer.invoke('doc:listVersions', data),
+  restoreVersion: (data) => ipcRenderer.invoke('doc:restoreVersion', data),
 
   // Peers
   listPeers: () => ipcRenderer.invoke('peers:list'),
@@ -88,12 +94,11 @@ const electronAPI: IPCAPI = {
     ipcRenderer.on('update:available', (_event, info) => callback(info));
   },
 
-  // Live P2P Sync (Upgraded)
+  // Live P2P Sync
   sendDocumentUpdate: (data) => ipcRenderer.send('doc:send-update', data),
   onDocumentUpdate: (callback) => {
     const subscription = (_event: any, data: any) => callback(data);
     ipcRenderer.on('doc:receive-update', subscription);
-    // Return a cleanup function so React can stop listening when you close the document
     return () => {
       ipcRenderer.removeListener('doc:receive-update', subscription);
     };
