@@ -1,15 +1,24 @@
 // electron/main.ts
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, net } from 'electron';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 import { EncryptedDatabase } from './database/encrypted-db';
 import { v4 as uuidv4 } from 'uuid';
 import * as bip39 from 'bip39';
 import { P2PEngine } from './p2p';
 import * as Y from 'yjs';
 
+
 let activeDatabase: EncryptedDatabase | null = null;
 let p2pEngine: P2PEngine | null = null;
 let mainWindow: BrowserWindow | null;
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true }
+  }
+]);
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -19,19 +28,22 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      // Change sandbox to false to ensure the bridge connects in production
+      sandbox: false, 
+      // Ensure the path correctly points to the file in dist-electron
       preload: path.join(__dirname, 'preload.js')
     }
   });
 
   const isDev = process.env.npm_lifecycle_event === 'dev' || !app.isPackaged;
+  mainWindow.webContents.openDevTools();
 
   if (isDev) {
     console.log('Running in Dev Mode: Loading localhost:3000');
     mainWindow.loadURL('http://localhost:3000');
   } else {
     console.log('Running in Production: Loading compiled HTML');
-    mainWindow.loadFile(path.join(__dirname, '../.next/server/app/index.html'));
+    mainWindow.loadURL('app://index.html');
   }
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
@@ -83,14 +95,57 @@ function setupIpcHandlers() {
                                 db.prepare(`DELETE FROM tasks WHERE id = ?`).run(payload.taskId);
                                 if (mainWindow) mainWindow.webContents.send('sync-refresh');
                             }
+
+                            else if (payload.type === 'SYNC_DOC_UPSERT') {
+                            const d = payload.doc;
+                            db.prepare(`
+                                INSERT INTO documents (id, project_id, title, yjs_state, last_edited_by, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                                ON CONFLICT(id) DO UPDATE SET
+                                title = excluded.title,
+                                updated_at = excluded.updated_at
+                            `).run(
+                                d.id,
+                                d.project_id,
+                                d.title,
+                                d.yjs_state || null,
+                                d.last_edited_by || null,
+                                d.updated_at || new Date().toISOString()
+                            );
+                            if (mainWindow) mainWindow.webContents.send('sync-refresh');
+                        }
+                        else if (payload.type === 'SYNC_DOC_DELETE') {
+                            db.prepare(`DELETE FROM documents WHERE id = ?`).run(payload.docId);
+                            if (mainWindow) mainWindow.webContents.send('sync-refresh');
+                        }
                             else if (payload.type === 'SYNC_DOC_UPDATE') {
-                                if (mainWindow) {
-                                    mainWindow.webContents.send('doc:receive-update', {
-                                        docId: payload.docId,
-                                        update: payload.update
-                                    });
-                                }
-                            }
+    // Broadcast to all other peers
+    p2pEngine?.broadcast({
+        type: 'SYNC_DOC_UPDATE',
+        docId: payload.docId,
+        update: payload.update
+    });
+    
+    // Send to our own renderer window
+    if (mainWindow) {
+        mainWindow.webContents.send('doc:receive-update', {
+            docId: payload.docId,
+            update: payload.update
+        });
+    }
+    
+    // Save to database
+    try {
+        if (activeDatabase && payload.update) {
+            const db = activeDatabase.getDb();
+            const fullState = Array.from(payload.update);
+            db.prepare(`UPDATE documents SET yjs_state = ?, updated_at = datetime('now') WHERE id = ?`).run(JSON.stringify(fullState), payload.docId);
+            console.log(`[P2P] Saved document update for ${payload.docId}`);
+        }
+    } catch (error) {
+        console.error('[P2P] Failed to save document update:', error);
+    }
+}
                             else if (payload.type === 'SYNC_CHAT_MESSAGE') {
                                 const m = payload.message;
                                 db.prepare(`
@@ -107,31 +162,323 @@ function setupIpcHandlers() {
                                 db.prepare(`DELETE FROM project_messages WHERE id = ?`).run(payload.id);
                                 if (mainWindow) mainWindow.webContents.send('sync-refresh');
                             }
-                            else if (payload.type === 'JOIN_PROJECT_REQUEST') {
-                                const invite = db.prepare(`SELECT * FROM project_invites WHERE invite_token = ? AND expires_at > ?`).get(payload.token, new Date().toISOString()) as any;
+
+                            else if (payload.type === 'PEER_JOINED_PROJECT') {
+                                if (!activeDatabase) return;
+                                const db = activeDatabase.getDb();
                                 
-                                if (invite) {
-                                    db.prepare(`INSERT INTO project_members (project_id, peer_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`).run(invite.project_id, payload.peerId, invite.role);
-                                    db.prepare(`INSERT INTO peers (id, username, email, public_key) VALUES (?, ?, '', 'placeholder') ON CONFLICT DO NOTHING`).run(payload.peerId, payload.username);
+                                try {
+                                    console.log(`[P2P] Received PEER_JOINED_PROJECT: ${payload.newUsername} joining ${payload.projectId}`);
+                                    
+                                    if (payload.projectData.project) {
+                                    if (payload.projectData.members && Array.isArray(payload.projectData.members)) {
+                                        payload.projectData.members.forEach((m: any) => {
+                                            if (m.peer_id) {
+                                                db.prepare(`
+                                                    INSERT INTO peers (id, username, email, public_key)
+                                                    VALUES (?, ?, '', 'placeholder')
+                                                    ON CONFLICT(id) DO NOTHING
+                                                `).run(m.peer_id, m.peer_id);
+                                            }
+                                        });
+                                    }
 
-                                    const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(invite.project_id);
-                                    const tasks = db.prepare(`SELECT * FROM tasks WHERE project_id = ?`).all(invite.project_id);
-                                    const docs = db.prepare(`SELECT * FROM documents WHERE project_id = ?`).all(invite.project_id);
-                                    const members = db.prepare(`SELECT * FROM project_members WHERE project_id = ?`).all(invite.project_id);
-                                    const messages = db.prepare(`SELECT * FROM project_messages WHERE project_id = ?`).all(invite.project_id);
-
-                                    p2pEngine?.broadcast({
-                                        type: 'JOIN_PROJECT_ACCEPT',
-                                        targetPeerId: payload.peerId,
+                                    db.prepare(`
+                                        INSERT INTO projects (id, name, created_by, created_at)
+                                        VALUES (?, ?, ?, ?)
+                                        ON CONFLICT(id) DO UPDATE SET
+                                        name = excluded.name
+                                    `).run(
+                                        payload.projectData.project.id,
+                                        payload.projectData.project.name,
+                                        payload.projectData.project.created_by,
+                                        payload.projectData.project.created_at
+                                    );
+                                    }
+                                    
+                                    if (payload.projectData.members && Array.isArray(payload.projectData.members)) {
+                                        const insertMember = db.prepare(`
+                                            INSERT INTO project_members (project_id, peer_id, role, joined_at, nickname)
+                                            VALUES (?, ?, ?, ?, NULL)
+                                            ON CONFLICT(project_id, peer_id) DO UPDATE SET
+                                            role = excluded.role
+                                        `);
+                                        payload.projectData.members.forEach((m: any) => {
+                                            insertMember.run(m.project_id, m.peer_id, m.role, m.joined_at || new Date().toISOString());
+                                        });
+                                    }
+                                    
+                                    if (payload.projectData.tasks && Array.isArray(payload.projectData.tasks)) {
+                                        const insertTask = db.prepare(`
+                                            INSERT INTO tasks (id, project_id, title, status, position, assigned_to, start_date, due_date)
+                                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                            ON CONFLICT(id) DO UPDATE SET
+                                            status = excluded.status, 
+                                            title = excluded.title, 
+                                            position = excluded.position
+                                        `);
+                                        payload.projectData.tasks.forEach((t: any) => {
+                                            insertTask.run(
+                                                t.id, 
+                                                t.project_id, 
+                                                t.title, 
+                                                t.status, 
+                                                t.position || 0, 
+                                                t.assigned_to || null, 
+                                                t.start_date || null, 
+                                                t.due_date || null
+                                            );
+                                        });
+                                    }
+                                    
+                                    if (payload.projectData.docs && Array.isArray(payload.projectData.docs)) {
+                                        const insertDoc = db.prepare(`
+                                            INSERT INTO documents (id, project_id, title, yjs_state, last_edited_by, updated_at)
+                                            VALUES (?, ?, ?, ?, ?, ?)
+                                            ON CONFLICT(id) DO UPDATE SET
+                                            title = excluded.title,
+                                            yjs_state = excluded.yjs_state,
+                                            updated_at = excluded.updated_at
+                                        `);
+                                        payload.projectData.docs.forEach((d: any) => {
+                                            insertDoc.run(
+                                                d.id, 
+                                                d.project_id, 
+                                                d.title, 
+                                                d.yjs_state || null, 
+                                                d.last_edited_by || null, 
+                                                d.updated_at || new Date().toISOString()
+                                            );
+                                        });
+                                    }
+                                    
+                                    if (payload.projectData.messages && Array.isArray(payload.projectData.messages)) {
+                                        const insertMsg = db.prepare(`
+                                            INSERT INTO project_messages (id, project_id, sender, text, attachment, attachment_name, is_edited, timestamp)
+                                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                            ON CONFLICT(id) DO UPDATE SET
+                                            text = excluded.text,
+                                            is_edited = excluded.is_edited
+                                        `);
+                                        payload.projectData.messages.forEach((m: any) => {
+                                            insertMsg.run(
+                                                m.id, 
+                                                m.project_id, 
+                                                m.sender, 
+                                                m.text || '', 
+                                                m.attachment || null, 
+                                                m.attachment_name || null, 
+                                                m.is_edited || 0, 
+                                                m.timestamp
+                                            );
+                                        });
+                                    }
+                                    
+                                    console.log(`[P2P] Successfully synced all project data for ${payload.projectId}`);
+                                    
+                                    if (mainWindow) mainWindow.webContents.send('sync-refresh');
+                                } catch (error) {
+                                    console.error('[P2P] Failed to process peer join:', error);
+                                }
+                            }
+                            else if (payload.type === 'JOIN_PROJECT_WITH_TOKEN') {
+                                console.log(`[P2P] ${payload.joiningUsername} wants to join with token: ${payload.token}`);
+                                
+                                // Check if WE have this token in our database
+                                const invite = db.prepare(`
+                                    SELECT * FROM project_invites 
+                                    WHERE invite_token = ? AND expires_at > ?
+                                `).get(payload.token, new Date().toISOString()) as any;
+                                
+                                if (!invite) {
+                                    console.log(`[P2P] Token ${payload.token} not found on this machine - ignoring`);
+                                    return;
+                                }
+                                
+                                console.log(`[P2P] Token is valid! Processing join for ${payload.joiningUsername}`);
+                                
+                                // Add the joining peer to our peers table
+                                db.prepare(`
+                                    INSERT INTO peers (id, username, email, public_key)
+                                    VALUES (?, ?, '', 'placeholder')
+                                    ON CONFLICT(id) DO UPDATE SET 
+                                    username = excluded.username
+                                `).run(payload.joiningPeerId, payload.joiningUsername);
+                                
+                                // Add them to the project
+                                db.prepare(`
+                                    INSERT INTO project_members (project_id, peer_id, role, joined_at)
+                                    VALUES (?, ?, ?, datetime('now'))
+                                    ON CONFLICT DO NOTHING
+                                `).run(invite.project_id, payload.joiningPeerId, invite.role);
+                                
+                                console.log(`[P2P] Added ${payload.joiningUsername} to project ${invite.project_id}`);
+                                
+                                // Get all the project data from our database
+                                const project = db.prepare(`SELECT * FROM projects WHERE id = ?`)
+                                    .get(invite.project_id) as any;
+                                const tasks = db.prepare(`SELECT * FROM tasks WHERE project_id = ?`)
+                                    .all(invite.project_id) as any[];
+                                const docs = db.prepare(`SELECT * FROM documents WHERE project_id = ?`)
+                                    .all(invite.project_id) as any[];
+                                const members = db.prepare(`SELECT * FROM project_members WHERE project_id = ?`)
+                                    .all(invite.project_id) as any[];
+                                const messages = db.prepare(`SELECT * FROM project_messages WHERE project_id = ?`)
+                                    .all(invite.project_id) as any[];
+                                
+                                console.log(`[P2P] Sending project data to ${payload.joiningUsername}: ${tasks.length} tasks, ${docs.length} docs, ${members.length} members`);
+                                
+                                // Send the project data back to the joiner
+                                p2pEngine?.broadcast({
+                                    type: 'PEER_JOINED_PROJECT_DATA',
+                                    projectId: invite.project_id,
+                                    joiningPeerId: payload.joiningPeerId,
+                                    joiningUsername: payload.joiningUsername,
+                                    projectData: {
                                         project,
                                         tasks,
                                         docs,
                                         members,
                                         messages
-                                    });
+                                    }
+                                });
+                                
+                                if (mainWindow) mainWindow.webContents.send('sync-refresh');
+                            }
+
+                            else if (payload.type === 'PEER_JOINED_PROJECT_DATA') {
+                                console.log(`[P2P] Received project data for ${payload.joiningUsername}`);
+                                
+                                // Check if this data is for us (the current user joining)
+                                if (payload.joiningUsername === credentials.userId) {
+                                    console.log(`[P2P] This data is for us! Importing project ${payload.projectId}`);
+                                    
+                                    // Insert the project into OUR database
+                                    if (payload.projectData.project) {
+                                        db.prepare(`
+                                            INSERT INTO projects (id, name, created_by, created_at)
+                                            VALUES (?, ?, ?, ?)
+                                            ON CONFLICT(id) DO UPDATE SET
+                                            name = excluded.name
+                                        `).run(
+                                            payload.projectData.project.id,
+                                            payload.projectData.project.name,
+                                            payload.projectData.project.created_by,
+                                            payload.projectData.project.created_at
+                                        );
+                                        console.log(`[P2P] Inserted project ${payload.projectId}`);
+                                    }
+                                    
+                                    // Insert all members
+                                    // Insert placeholder peers first to avoid FK constraint failures
+                                    if (payload.projectData.members && Array.isArray(payload.projectData.members)) {
+                                        const upsertPeer = db.prepare(`
+                                            INSERT INTO peers (id, username, email, public_key)
+                                            VALUES (?, ?, '', 'placeholder')
+                                            ON CONFLICT(id) DO NOTHING
+                                        `);
+                                        payload.projectData.members.forEach((m: any) => {
+                                            if (m.peer_id) upsertPeer.run(m.peer_id, m.peer_id);
+                                        });
+                                    }
+
+                                    // Insert all members
+                                    if (payload.projectData.members && Array.isArray(payload.projectData.members)) {
+                                        const insertMember = db.prepare(`
+                                            INSERT INTO project_members (project_id, peer_id, role, joined_at)
+                                            VALUES (?, ?, ?, ?)
+                                            ON CONFLICT(project_id, peer_id) DO UPDATE SET
+                                            role = excluded.role
+                                        `);
+                                        payload.projectData.members.forEach((m: any) => {
+                                            insertMember.run(m.project_id, m.peer_id, m.role, m.joined_at || new Date().toISOString());
+                                        });
+                                        console.log(`[P2P] Inserted ${payload.projectData.members.length} members`);
+                                    }
+
+                                    // Ensure the joiner's own membership row exists even if the host snapshot omitted them
+                                    const selfPeer = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(credentials.userId) as any;
+                                    if (selfPeer && payload.projectData.project) {
+                                        db.prepare(`
+                                            INSERT INTO project_members (project_id, peer_id, role, joined_at)
+                                            VALUES (?, ?, 'editor', datetime('now'))
+                                            ON CONFLICT(project_id, peer_id) DO NOTHING
+                                        `).run(payload.projectData.project.id, selfPeer.id);
+}
+                                    
+                                    // Insert all tasks
+                                    if (payload.projectData.tasks && Array.isArray(payload.projectData.tasks)) {
+                                        const insertTask = db.prepare(`
+                                            INSERT INTO tasks (id, project_id, title, status, position, assigned_to, start_date, due_date)
+                                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                            ON CONFLICT(id) DO UPDATE SET
+                                            status = excluded.status,
+                                            title = excluded.title
+                                        `);
+                                        payload.projectData.tasks.forEach((t: any) => {
+                                            insertTask.run(
+                                                t.id,
+                                                t.project_id,
+                                                t.title,
+                                                t.status,
+                                                t.position || 0,
+                                                t.assigned_to || null,
+                                                t.start_date || null,
+                                                t.due_date || null
+                                            );
+                                        });
+                                        console.log(`[P2P] Inserted ${payload.projectData.tasks.length} tasks`);
+                                    }
+                                    
+                                    // Insert all documents
+                                    if (payload.projectData.docs && Array.isArray(payload.projectData.docs)) {
+                                        const insertDoc = db.prepare(`
+                                            INSERT INTO documents (id, project_id, title, yjs_state, last_edited_by, updated_at)
+                                            VALUES (?, ?, ?, ?, ?, ?)
+                                            ON CONFLICT(id) DO UPDATE SET
+                                            title = excluded.title
+                                        `);
+                                        payload.projectData.docs.forEach((d: any) => {
+                                            insertDoc.run(
+                                                d.id,
+                                                d.project_id,
+                                                d.title,
+                                                d.yjs_state || null,
+                                                d.last_edited_by || null,
+                                                d.updated_at || new Date().toISOString()
+                                            );
+                                        });
+                                        console.log(`[P2P] Inserted ${payload.projectData.docs.length} documents`);
+                                    }
+                                    
+                                    // Insert all messages
+                                    if (payload.projectData.messages && Array.isArray(payload.projectData.messages)) {
+                                        const insertMsg = db.prepare(`
+                                            INSERT INTO project_messages (id, project_id, sender, text, attachment, attachment_name, is_edited, timestamp)
+                                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                            ON CONFLICT(id) DO UPDATE SET
+                                            text = excluded.text
+                                        `);
+                                        payload.projectData.messages.forEach((m: any) => {
+                                            insertMsg.run(
+                                                m.id,
+                                                m.project_id,
+                                                m.sender,
+                                                m.text || '',
+                                                m.attachment || null,
+                                                m.attachment_name || null,
+                                                m.is_edited || 0,
+                                                m.timestamp
+                                            );
+                                        });
+                                        console.log(`[P2P] Inserted ${payload.projectData.messages.length} messages`);
+                                    }
+                                    
+                                    console.log(`[P2P] Successfully imported all project data!`);
                                     if (mainWindow) mainWindow.webContents.send('sync-refresh');
                                 }
                             }
+
                             else if (payload.type === 'JOIN_PROJECT_ACCEPT') {
                                 const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(credentials.userId) as any;
                                 
@@ -268,13 +615,37 @@ function setupIpcHandlers() {
     });
 
     ipcMain.handle('project:join', async (_event, { token, userId }) => {
-        if (!activeDatabase || !p2pEngine) return { success: false, error: 'Network engine not ready' };
+        if (!activeDatabase || !p2pEngine) {
+            return { success: false, error: 'P2P not initialized' };
+        }
+        
         try {
             const db = activeDatabase.getDb();
-            const userRecord = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(userId) as any;
-            p2pEngine.broadcast({ type: 'JOIN_PROJECT_REQUEST', token: token, peerId: userRecord.id, username: userId });
+            console.log(`[Join] ${userId} requesting to join with token: ${token}`);
+            
+            // Ensure user exists in our peers table
+            let userPeer = db.prepare(`SELECT id FROM peers WHERE username = ?`).get(userId) as any;
+            if (!userPeer) {
+                const peerId = uuidv4();
+                console.log(`[Join] Creating new peer ${userId}`);
+                db.prepare(`INSERT INTO peers (id, username, email, public_key) 
+                           VALUES (?, ?, '', 'placeholder')`).run(peerId, userId);
+                userPeer = { id: peerId };
+            }
+            
+            // Broadcast the join request to all peers
+            console.log(`[Join] Broadcasting join request to network`);
+            p2pEngine.broadcast({
+                type: 'JOIN_PROJECT_WITH_TOKEN',
+                token: token,
+                joiningPeerId: userPeer.id,
+                joiningUsername: userId
+            });
+            
             return { success: true };
+            
         } catch (error: any) {
+            console.error('[Join] Error:', error);
             return { success: false, error: error.message };
         }
     });
@@ -334,15 +705,20 @@ function setupIpcHandlers() {
     });
 
     ipcMain.handle('doc:create', async (_event, { projectId, title }) => {
-        if (!activeDatabase) return { success: false, error: 'Database not active' };
-        try {
-            const docId = uuidv4();
-            activeDatabase.getDb().prepare(`INSERT INTO documents (id, project_id, title) VALUES (?, ?, ?)`).run(docId, projectId, title);
-            return { success: true, id: docId };
-        } catch (error: any) {
-            return { success: false, error: error.message };
+    if (!activeDatabase) return { success: false, error: 'Database not active' };
+    try {
+        const docId = uuidv4();
+        const db = activeDatabase.getDb();
+        db.prepare(`INSERT INTO documents (id, project_id, title) VALUES (?, ?, ?)`).run(docId, projectId, title);
+        if (p2pEngine) {
+            const newDoc = db.prepare(`SELECT * FROM documents WHERE id = ?`).get(docId);
+            p2pEngine.broadcast({ type: 'SYNC_DOC_UPSERT', doc: newDoc });
         }
-    });
+        return { success: true, id: docId };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});
 
     ipcMain.handle('doc:list', async (_event, { projectId }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
@@ -672,7 +1048,112 @@ function setupIpcHandlers() {
     });
 }
 
+    ipcMain.handle('peers:list', async () => {
+            if (!p2pEngine) return { success: true, peers: [] };
+            
+            try {
+                return { success: true, peers: p2pEngine.getKnownPeers() };
+            } catch (error: any) {
+                return { success: false, error: error.message };
+            }
+        });
+
+    ipcMain.handle('peers:trust', async (_event, peerId) => {
+    if (!activeDatabase || !p2pEngine) {
+        return { success: false, error: 'P2P not initialized' };
+    }
+    
+    try {
+        const db = activeDatabase.getDb();
+        
+        // Find the peer from the discovered peers list
+        const peer = p2pEngine.getKnownPeers().find((p: any) => p.id === peerId);
+        
+        if (!peer) {
+            console.error(`[Trust] Peer ${peerId} not found in network`);
+            return { success: false, error: 'Peer not found in network' };
+        }
+        
+        console.log(`[Trust] Attempting to trust peer: ${peer.user} (${peerId})`);
+        
+        // Check if peer already exists
+        const existingPeer = db.prepare(`SELECT id FROM peers WHERE id = ?`).get(peerId) as any;
+        
+        if (existingPeer) {
+            // Peer exists, just update
+            console.log(`[Trust] Peer already exists, updating...`);
+            db.prepare(`UPDATE peers SET username = ? WHERE id = ?`).run(peer.user, peerId);
+        } else {
+            // Peer doesn't exist, insert new
+            console.log(`[Trust] Creating new peer entry...`);
+            db.prepare(`
+                INSERT INTO peers (id, username, email, public_key)
+                VALUES (?, ?, ?, ?)
+            `).run(peerId, peer.user, '', 'placeholder');
+        }
+        
+        console.log(`[Trust] Peer ${peer.user} (${peerId}) is now trusted`);
+        return { success: true };
+        
+    } catch (error: any) {
+        console.error(`[Trust] Error:`, error);
+        return { success: false, error: error.message };
+    }
+});
+ 
+ipcMain.handle('peers:block', async (_event, peerId) => {
+    if (!activeDatabase) {
+        return { success: false, error: 'Database not active' };
+    }
+    
+    try {
+        const db = activeDatabase.getDb();
+        console.log(`[Block] Peer ${peerId} blocked`);
+        // TODO: Add 'blocked' column to peers table in future
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});
+ 
+ipcMain.handle('peers:get-safety-number', async (_event, peerId) => {
+    if (!activeDatabase) {
+        return { success: false, error: 'Database not active' };
+    }
+    
+    try {
+        // Generate deterministic safety number from peerId
+        const hash = peerId.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+        const safetyNumber = `${String(Math.abs(hash)).padStart(12, '0')}`.match(/.{1,3}/g)?.join(' ') || '000 000 000 000';
+        
+        console.log(`[Safety] Safety number for ${peerId}: ${safetyNumber}`);
+        return { success: true, safetyNumber };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});  
+
 app.whenReady().then(() => {
+    // FIX: Use the standard URL parser to safely remove "localhost"
+    protocol.handle('app', (request) => {
+        const url = new URL(request.url);
+        let urlPath = url.pathname;
+        
+        // Strip the leading slash so it joins correctly with our 'out' folder
+        urlPath = urlPath.replace(/^\/+/, '');
+
+        // Handle root or page routing
+        if (!urlPath) {
+            urlPath = 'index.html';
+        } else if (!path.extname(urlPath)) {
+            // If it's a Next.js page route (like 'dashboard'), append .html
+            urlPath += '.html';
+        }
+
+        const filePath = path.join(__dirname, '../out', urlPath);
+        return net.fetch(pathToFileURL(filePath).toString());
+    });
+
     setupIpcHandlers();
     createWindow();
 
