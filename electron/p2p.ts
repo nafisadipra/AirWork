@@ -2,6 +2,7 @@
 import * as dgram from 'dgram';
 import * as net from 'net';
 import { EventEmitter } from 'events';
+import * as os from 'os';
 
 const BROADCAST_PORT = 43210;
 const BROADCAST_ADDR = '255.255.255.255';
@@ -38,35 +39,61 @@ export class P2PEngine extends EventEmitter {
     }
 
     private startDiscovery() {
-        this.udpSocket.bind(BROADCAST_PORT, () => {
+        // FIX: Explicitly bind to all interfaces
+        this.udpSocket.bind(BROADCAST_PORT, '0.0.0.0', () => {
             this.udpSocket.setBroadcast(true);
             
             this.udpSocket.on('message', (msg, rinfo) => {
-                const message = msg.toString();
-                
-                if (message.startsWith('AIRWORK:HELLO:')) {
-                    const [, , id, user, port] = message.split(':');
-                    
-                    // If we found someone new...
-                    if (id !== this.peerId && !this.knownPeers.has(id)) {
-                        console.log(`[P2P] 📡 Heard ${user} on the network at ${rinfo.address}:${port}`);
-                        this.knownPeers.set(id, { id, user, address: rinfo.address, port: parseInt(port) });
-                        
-                        this.emit('peer-discovered', { id, user });
-                        
-                        this.connectToPeer(id, rinfo.address, parseInt(port));
-                    }
-                }
-            });
+            const message = msg.toString();
+            if (message.startsWith('AIRWORK:HELLO:')) {
+                const [, , id, user, port] = message.split(':');
+                if (id === this.peerId) return;
 
-            // <--- ADDED: Assign the interval to our tracker variable and add a safety try/catch --->
+                const isKnown = this.knownPeers.has(id);
+                const isConnected = this.activeConnections.has(id);
+
+                if (!isKnown) {
+                    console.log(`[P2P] Heard ${user} on the network at ${rinfo.address}:${port}`);
+                    this.knownPeers.set(id, { id, user, address: rinfo.address, port: parseInt(port) });
+                    this.emit('peer-discovered', { id, user });
+                }
+
+                if (!isConnected) {
+                    this.connectToPeer(id, rinfo.address, parseInt(port));
+                }
+            }
+        });
+
             this.broadcastInterval = setInterval(() => {
                 const msg = Buffer.from(`AIRWORK:HELLO:${this.peerId}:${this.username}:${this.tcpPort}`);
-                try {
-                    this.udpSocket.send(msg, 0, msg.length, BROADCAST_PORT, BROADCAST_ADDR);
-                } catch (error) {
-                    // Socket is likely closed, safely ignore to prevent crash
+                
+                // BULLETPROOF OMNI-BROADCAST: Find every active network and shout into it
+                const interfaces = os.networkInterfaces();
+                const broadcastAddresses = [BROADCAST_ADDR]; // Keep global as fallback
+
+                for (const name of Object.keys(interfaces)) {
+                    for (const iface of interfaces[name] || []) {
+                        if (iface.family === 'IPv4' && !iface.internal) {
+                            // Calculate exact subnet broadcast (e.g., 192.168.1.5 -> 192.168.1.255)
+                            const ipParts = iface.address.split('.');
+                            const maskParts = iface.netmask.split('.');
+                            const exactBroadcast = ipParts.map((ip, i) => 
+                                (parseInt(ip) | (~parseInt(maskParts[i]) & 255)).toString()
+                            ).join('.');
+                            broadcastAddresses.push(exactBroadcast);
+                        }
+                    }
                 }
+
+                // Remove duplicates and send to all
+                [...new Set(broadcastAddresses)].forEach(targetIP => {
+                    // FIX: Added ': any' to 'err' to stop TypeScript from panicking
+                    this.udpSocket.send(msg, 0, msg.length, BROADCAST_PORT, targetIP, (err: any) => {
+                        if (err && err.code !== 'ENETUNREACH' && err.code !== 'EACCES') {
+                            console.error(`[P2P] Broadcast failed on ${targetIP}:`, err.message);
+                        }
+                    });
+                });
             }, 3000);
             
             console.log('[P2P] 📢 Shouting presence to the local network...');
@@ -158,6 +185,10 @@ export class P2PEngine extends EventEmitter {
                 socket.write(messageString);
             }
         });
+    }
+
+    public getKnownPeers() {
+        return Array.from(this.knownPeers.values());
     }
 
     stop() {
