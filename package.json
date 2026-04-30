@@ -15,7 +15,7 @@
     "dev:next": "next dev --turbopack",
     "dev:electron": "wait-on http://localhost:3000 && tsc -p electron/tsconfig.json && electron .",
     "build": "npm run build:next && npm run build:electron && electron-builder",
-    "build:next": "next build",
+    "build:next": "next build --webpack",
     "build:electron": "tsc -p electron/tsconfig.json",
     "build:mac": "npm run build:next && npm run build:electron && electron-builder --mac",
     "build:win": "npm run build:next && npm run build:electron && electron-builder --win",
@@ -30,10 +30,13 @@
   },
   "dependencies": {
     "@node-rs/argon2": "^1.8.3",
+    "@signalapp/libsignal-client": "^0.39.0",
     "@tiptap/core": "^2.27.2",
     "@tiptap/extension-collaboration": "^2.27.2",
     "@tiptap/extension-collaboration-cursor": "^2.9.1",
-    "@tiptap/extension-list": "2",
+    "@tiptap/extension-bullet-list": "^2.27.2",
+    "@tiptap/extension-ordered-list": "^2.27.2",
+    "@tiptap/extension-list-item": "^2.27.2",
     "@tiptap/extension-task-item": "^2.27.2",
     "@tiptap/extension-task-list": "^2.27.2",
     "@tiptap/extension-text-align": "^2.27.2",
@@ -98,25 +101,20 @@
     },
     "files": [
       "dist-electron/**/*",
-      ".next/standalone/**/*",
-      ".next/static/**/*",
-      "public/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": ".next/standalone",
-        "to": "app"
-      }
+      "out/**/*"
     ],
     "mac": {
-      "category": "public.app-category.productivity",
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false
-    },
+  "category": "public.app-category.productivity",
+  "target": ["dmg", "zip"],
+  "hardenedRuntime": true,
+  "gatekeeperAssess": false,
+  "entitlements": "electron/entitlements.mac.plist",
+  "entitlementsInherit": "electron/entitlements.mac.plist",
+  "extendInfo": {
+    "NSLocalNetworkUsageDescription": "AirWork needs access to your local network to securely discover and sync offline with your teammates.",
+    "NSBonjourServices": ["_airwork._tcp", "_airwork._udp"]
+  }
+},
     "win": {
       "target": [
         "nsis",

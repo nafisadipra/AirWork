@@ -1,26 +1,32 @@
+const webpack = require('webpack');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  output: 'export',
   reactStrictMode: true,
   
-  // Disable image optimization for Electron
   images: {
     unoptimized: true,
   },
 
-  // Webpack config for Electron compatibility
   webpack: (config, { isServer }) => {
     if (!isServer) {
-      config.target = 'electron-renderer';
+      // FIX 1: Change target to 'web'
+      // This prevents Webpack from injecting 'require' calls into your frontend bundle
+      config.target = 'web';
+
+      // Keep the global polyfill so your P2P and Crypto libraries don't crash
+      config.plugins.push(
+        new webpack.DefinePlugin({
+          global: 'window',
+        })
+      );
     }
 
+    // FIX 2: Remove the 'commonjs' externals
+    // The frontend should NOT try to import these native modules; they live strictly in main.ts
     config.externals = [
       ...(config.externals || []),
-      {
-        '@journeyapps/sqlcipher': 'commonjs @journeyapps/sqlcipher',
-        'better-sqlite3': 'commonjs better-sqlite3',
-        'sodium-native': 'commonjs sodium-native',
-      },
     ];
 
     return config;
