@@ -10,9 +10,15 @@ export class EncryptedDatabase {
   private dbPath: string;
 
   constructor(userId: string) {
-    const userDataPath = app.getPath('userData');
-    this.dbPath = path.join(userDataPath, `airwork_${userId}.db`);
+  const userDataPath = app.getPath('userData');
+  
+  // FIX: Explicitly create the folder if it doesn't exist
+  if (!fs.existsSync(userDataPath)) {
+    fs.mkdirSync(userDataPath, { recursive: true });
   }
+
+  this.dbPath = path.join(userDataPath, `airwork_${userId}.db`);
+}
 
   // 1. Derives a 32-byte wrapping key from a secret (password or phrase)
   private deriveKey(secret: string, salt: Buffer): Buffer {
