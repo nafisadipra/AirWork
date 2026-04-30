@@ -65,6 +65,12 @@ const electronAPI: IPCAPI = {
     ipcRenderer.on('sync-refresh', () => callback());
   },
 
+  onSyncMessage: (callback: (data?: any) => void) => {
+    const listener = (_event: any, data?: any) => callback(data);
+    ipcRenderer.on('sync-refresh', listener);
+    return () => ipcRenderer.removeListener('sync-refresh', listener);
+  },
+
   // Chat
   getMessages: (data) => ipcRenderer.invoke('chat:get', data),
   sendMessage: (data) => ipcRenderer.invoke('chat:send', data),
