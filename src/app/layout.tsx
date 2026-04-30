@@ -16,7 +16,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      {/* suppressHydrationWarning stops Next.js from panicking in Electron */}
+      <head>
+        {/* CRITICAL FIX: Define 'global' before any other JS loads */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (typeof global === 'undefined') {
+                window.global = window;
+              }
+            `,
+          }}
+        />
+      </head>
       <body className={inter.className} suppressHydrationWarning={true}>
         {children}
       </body>
