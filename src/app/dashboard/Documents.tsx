@@ -58,6 +58,26 @@ export default function Documents({ selectedProject, username }: DocumentsProps)
     }
   }, [activeDoc]);
 
+  // Listen for P2P sync events to refresh documents
+useEffect(() => {
+    const api = (window as any).electronAPI;
+    
+    if (api && api.onSyncMessage) {
+        const unsubscribe = api.onSyncMessage(async () => {
+            if (activeDoc) {
+                // If viewing a doc, refresh branches
+                fetchBranches(activeDoc.id);
+            } else {
+                // If viewing list, refresh documents
+                fetchDocuments();
+            }
+            console.log('[Docs] Refreshed from P2P sync');
+        });
+        
+        return () => unsubscribe?.();
+    }
+}, [activeDoc]);
+
   const handleCreateDoc = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDocTitle.trim()) return;
