@@ -90,6 +90,7 @@ export interface IPCAPI {
 
   // Sync Events
   onSyncRefresh: (callback: () => void) => void;
+  onSyncMessage: (callback: (data?: any) => void) => () => void;
 
   // Chat
   getMessages: (data: { projectId: string }) => Promise<{ success: boolean; messages?: any[]; error?: string }>;
