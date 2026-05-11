@@ -308,10 +308,6 @@ MIT License - see [LICENSE](https://www.google.com/search?q=./LICENSE) file for 
 -----
 
 ## 📞 Support
-
-  - **Documentation**: [./docs](https://www.google.com/search?q=./docs)
-  - **Bug Reports**: [GitHub Issues](https://www.google.com/search?q=https://github.com/yourusername/airwork/issues)
-  - **Discussions**: [GitHub Discussions](https://www.google.com/search?q=https://github.com/yourusername/airwork/discussions)
   - **Security**: nafishaanzumdipra@gmail.com
 
 -----
