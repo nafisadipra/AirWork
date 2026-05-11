@@ -328,6 +328,6 @@ For highly sensitive data:
 
 ##  Built With Love
 
-Made with by developers who care about privacy and security.
+Made with by developer who care about privacy and security.
 
 **Star this repo** if you believe in privacy-first software\!
