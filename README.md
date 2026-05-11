@@ -114,16 +114,7 @@ npm run build:linux   # Linux
 
 -----
 
-##  Documentation
-
-  - **[COMPLETE-IMPLEMENTATION-GUIDE.md](https://www.google.com/search?q=./COMPLETE-IMPLEMENTATION-GUIDE.md)** - Full implementation details
-  - **[SECURITY-AUDIT-CHECKLIST.md](https://www.google.com/search?q=./SECURITY-AUDIT-CHECKLIST.md)** - Comprehensive security testing
-  - **[ARCHITECTURE.md](https://www.google.com/search?q=./docs/ARCHITECTURE.md)** - System architecture deep-dive
-  - **[API.md](https://www.google.com/search?q=./docs/API.md)** - IPC API documentation
-
------
-
-## 🧪 Testing
+##  Testing
 
 ```bash
 # Run all tests
@@ -144,7 +135,7 @@ npm run audit
 
 -----
 
-## 📦 Building for Distribution
+##  Building for Distribution
 
 ### macOS
 
@@ -174,7 +165,7 @@ npm run build:linux
 
 -----
 
-## 🤝 How Collaboration Works
+##  How Collaboration Works
 
 1.  **Two users on same LAN** start the app
 2.  **P2P discovery** finds peers via multicast
@@ -187,7 +178,7 @@ npm run build:linux
 
 -----
 
-## 🔒 Privacy & Security Guarantees
+##  Privacy & Security Guarantees
 
 ### What We CAN'T See
 
@@ -216,7 +207,7 @@ We (the developers) have **zero knowledge** of your data. Even if we wanted to, 
 
 -----
 
-## 🆚 Comparison with Alternatives
+##  Comparison with Alternatives
 
 | Feature | AirWork | Notion | Google Docs | Obsidian | Signal |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -231,7 +222,7 @@ We (the developers) have **zero knowledge** of your data. Even if we wanted to, 
 
 -----
 
-## 🛠️ Technology Stack
+##  Technology Stack
 
 ### Frontend
 
@@ -260,7 +251,7 @@ We (the developers) have **zero knowledge** of your data. Even if we wanted to, 
 
 -----
 
-## 📝 Roadmap
+##  Roadmap
 
 ### v1.0 (Current)
 
@@ -289,18 +280,14 @@ We (the developers) have **zero knowledge** of your data. Even if we wanted to, 
 
 -----
 
-## Contributing
-
-We welcome contributions\! Please see [CONTRIBUTING.md](https://www.google.com/search?q=./CONTRIBUTING.md) for guidelines.
-
 ### Security Contributions
 
 If you find a security vulnerability:
 
 1.  **DO NOT** open a public issue
-2.  Email security@airwork.app
+2.  Email nafishaanzumdipra@gmail.com
 3.  We'll respond within 24 hours
-4.  See [SECURITY.md](https://www.google.com/search?q=./SECURITY.md) for our responsible disclosure policy
+
 
 -----
 
@@ -325,11 +312,11 @@ MIT License - see [LICENSE](https://www.google.com/search?q=./LICENSE) file for 
   - **Documentation**: [./docs](https://www.google.com/search?q=./docs)
   - **Bug Reports**: [GitHub Issues](https://www.google.com/search?q=https://github.com/yourusername/airwork/issues)
   - **Discussions**: [GitHub Discussions](https://www.google.com/search?q=https://github.com/yourusername/airwork/discussions)
-  - **Security**: security@airwork.app
+  - **Security**: nafishaanzumdipra@gmail.com
 
 -----
 
-## ⚠️ Disclaimer
+##  Disclaimer
 
 This software is provided "as is" without warranty of any kind. While we've implemented industry-standard cryptography and security best practices, **no software is 100% secure**.
 
@@ -343,7 +330,7 @@ For highly sensitive data:
 
 -----
 
-## 🎉 Built With Love
+##  Built With Love
 
 Made with by developers who care about privacy and security.
 
