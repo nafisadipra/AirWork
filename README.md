@@ -1,4 +1,4 @@
-# 🔒 AirWork - Secure Local-First Collaboration Platform
+#  AirWork - Secure Local-First Collaboration Platform
 
 **End-to-end encrypted, offline-first collaboration platform built with Next.js, Electron, and Signal Protocol.**
 
@@ -37,7 +37,7 @@ npm run build:linux   # Linux
 
 -----
 
-## 📋 Requirements
+##  Requirements
 
   - **Node.js** 18+
   - **npm** 9+
@@ -47,7 +47,7 @@ npm run build:linux   # Linux
 
 -----
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -73,7 +73,7 @@ npm run build:linux   # Linux
 
 -----
 
-## 🔐 Security Features
+##  Security Features
 
 ### End-to-End Encryption
 
@@ -114,7 +114,7 @@ npm run build:linux   # Linux
 
 -----
 
-## 📖 Documentation
+##  Documentation
 
   - **[COMPLETE-IMPLEMENTATION-GUIDE.md](https://www.google.com/search?q=./COMPLETE-IMPLEMENTATION-GUIDE.md)** - Full implementation details
   - **[SECURITY-AUDIT-CHECKLIST.md](https://www.google.com/search?q=./SECURITY-AUDIT-CHECKLIST.md)** - Comprehensive security testing
