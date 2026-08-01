@@ -23,18 +23,15 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   
-  // Edit States
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editMessageText, setEditMessageText] = useState('');
 
-  // Attachment States
   const [attachment, setAttachment] = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -49,7 +46,6 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
     return member?.nickname || senderUsername;
   };
 
-  // Load messages when project changes
   useEffect(() => {
     if (!selectedProject) return;
     
@@ -59,7 +55,6 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
         const result = await api.getMessages({ projectId: selectedProject.id });
         if (result.success && result.messages) {
           setMessages(result.messages);
-          console.log(`[Chat] Loaded ${result.messages.length} messages`);
         }
       } catch (error) {
         console.error('[Chat] Failed to load messages:', error);
@@ -69,7 +64,6 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
     loadMessages();
   }, [selectedProject]);
 
-  // Listen for P2P sync events
   useEffect(() => {
     const api = (window as any).electronAPI;
     
@@ -81,7 +75,6 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
           const result = await api.getMessages({ projectId: selectedProject.id });
           if (result.success && result.messages) {
             setMessages(result.messages);
-            console.log('[Chat] Refreshed messages from P2P sync');
           }
         } catch (error) {
           console.error('[Chat] Failed to refresh messages:', error);
@@ -91,8 +84,6 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
       return () => unsubscribe?.();
     }
   }, [selectedProject]);
-
-  // --- ACTIONS ---
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,7 +104,7 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
     
     try {
         const api = (window as any).electronAPI;
-        const result = await api.sendMessage({
+        await api.sendMessage({
             id: messageId,
             projectId: selectedProject.id,
             sender: username,
@@ -122,12 +113,6 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
             attachmentName: attachmentName,
             timestamp: new Date().toISOString()
         });
-        
-        if (!result.success) {
-            console.error('[Chat] Failed to send message:', result.error);
-        } else {
-            console.log('[Chat] Message sent successfully');
-        }
     } catch (error) {
         console.error('[Chat] Error sending message:', error);
     }
@@ -161,8 +146,6 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
     setEditMessageText('');
   };
 
-  // --- ATTACHMENT HANDLING ---
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -182,35 +165,34 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Note: Outer borders removed because dashboard.tsx handles the card wrap
   return (
-    <div className="flex flex-col h-full relative animate-in fade-in duration-300">
+    <div className="flex flex-col h-full relative animate-in fade-in duration-150">
       
       {/* Header */}
-      <div className="h-16 border-b border-neutral-100 flex items-center justify-between shrink-0 mb-4 px-2">
+      <div className="h-14 border-b border-zinc-200 flex items-center justify-between shrink-0 mb-3 px-1">
         <div>
-          <h2 className="text-lg font-bold text-black">
+          <h2 className="text-base font-bold text-zinc-950">
             {selectedProject.id === 'global' ? 'Global Watercooler' : 'Project Chat'}
           </h2>
-          <p className="text-[11px] text-neutral-500 uppercase tracking-wider font-bold mt-0.5">
-            End-to-End Encrypted
+          <p className="text-[10px] text-zinc-500 font-mono">
+            Signal Protocol Encrypted P2P
           </p>
         </div>
-        <span className="flex h-3 w-3 relative">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4caf50] opacity-50"></span>
-          <span className="relative inline-flex rounded-full h-3 w-3 bg-[#2e7d32]"></span>
+        <span className="flex h-2.5 w-2.5 relative">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
         </span>
       </div>
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-2 space-y-6 pb-4">
+      {/* Messages List */}
+      <div className="flex-1 overflow-y-auto px-1 space-y-4 pb-3 scrollbar-thin">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-neutral-400">
-            <svg className="w-16 h-16 mb-4 opacity-30 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <div className="h-full flex flex-col items-center justify-center text-zinc-400">
+            <svg className="w-12 h-12 mb-3 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
-            <p className="text-sm uppercase tracking-widest font-bold text-neutral-400">It's quiet in here...</p>
-            <p className="text-xs mt-2 font-medium">Send a message to sync with the local network.</p>
+            <p className="text-xs uppercase tracking-widest font-bold text-zinc-400">No Messages</p>
+            <p className="text-[11px] text-zinc-400 mt-1">Start a conversation with local peers.</p>
           </div>
         ) : (
           messages.map((msg) => {
@@ -220,17 +202,16 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
             return (
               <div key={msg.id} className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}>
                 
-                <div className="flex items-baseline gap-2 mb-1.5 px-1">
-                  <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                <div className="flex items-baseline gap-2 mb-1 px-1">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
                     {getDisplayName(msg.sender)}
                   </span>
-                  <span className="text-[10px] text-neutral-400 font-medium">
+                  <span className="text-[9px] font-mono text-zinc-400">
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  {msg.isEdited && <span className="text-[10px] text-[#0066FF] font-bold italic">(edited)</span>}
+                  {msg.isEdited && <span className="text-[9px] text-zinc-400 font-mono italic">(edited)</span>}
                 </div>
 
-                {/* EDIT MODE */}
                 {isEditing ? (
                   <form onSubmit={submitEdit} className="flex gap-2 w-full max-w-[75%]">
                     <input 
@@ -238,61 +219,56 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
                       type="text" 
                       value={editMessageText} 
                       onChange={(e) => setEditMessageText(e.target.value)}
-                      className="flex-1 bg-[#f4f5f8] border border-[#0066FF] rounded-2xl px-4 py-2.5 text-sm text-black focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      className="flex-1 bg-zinc-50 border border-zinc-950 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none"
                     />
-                    <button type="submit" className="text-sm bg-[#0066FF] text-white px-4 rounded-full font-bold shadow-sm">Save</button>
-                    <button type="button" onClick={() => setEditingMessageId(null)} className="text-sm text-neutral-500 hover:text-black px-2 font-medium">Cancel</button>
+                    <button type="submit" className="text-xs bg-zinc-950 text-white px-3.5 rounded-xl font-bold">Save</button>
+                    <button type="button" onClick={() => setEditingMessageId(null)} className="text-xs text-zinc-500 hover:text-zinc-950 px-1">Cancel</button>
                   </form>
                 ) : (
-                  /* NORMAL MESSAGE DISPLAY */
-                  <div className="flex items-center gap-3">
-                    {/* Hover Actions */}
+                  <div className="flex items-center gap-2">
                     {isMe && (
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => startEditing(msg)} className="p-1.5 text-neutral-400 hover:text-[#0066FF] hover:bg-blue-50 rounded-full transition-colors" title="Edit">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => startEditing(msg)} className="p-1 text-zinc-400 hover:text-zinc-950 rounded-md" title="Edit">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                         </button>
-                        <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Delete">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        <button onClick={() => handleDeleteMessage(msg.id)} className="p-1 text-zinc-400 hover:text-zinc-950 rounded-md" title="Delete">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                       </div>
                     )}
                     
-                    {/* The Bubble */}
-                    <div className={`px-5 py-3.5 max-w-md text-sm font-medium leading-relaxed ${
+                    <div className={`px-4 py-3 max-w-md text-xs leading-relaxed ${
                       isMe 
-                        ? 'bg-[#0066FF] text-white rounded-[24px] rounded-tr-sm shadow-sm' 
-                        : 'bg-[#f4f5f8] text-black rounded-[24px] rounded-tl-sm border border-neutral-100'
+                        ? 'bg-zinc-950 text-white rounded-2xl rounded-tr-xs shadow-2xs font-medium' 
+                        : 'bg-zinc-100 text-zinc-950 rounded-2xl rounded-tl-xs border border-zinc-200 font-medium'
                     }`}>
                       
-                      {/* DOWNLOADABLE ATTACHMENTS */}
                       {msg.attachment && (
-                        <div className="mb-3">
+                        <div className="mb-2">
                            {msg.attachment.startsWith('data:image') ? (
                              <div className="relative group/attach inline-block">
-                               <img src={msg.attachment} alt="attachment" className="rounded-xl max-w-full h-auto max-h-56 object-cover border border-black/5 shadow-sm" />
+                               <img src={msg.attachment} alt="attachment" className="rounded-lg max-w-full h-auto max-h-48 object-cover border border-zinc-200 shadow-2xs" />
                                <a 
                                  href={msg.attachment} 
                                  download={msg.attachmentName || 'image-attachment'} 
-                                 className="absolute bottom-2 right-2 bg-black/50 backdrop-blur-md text-white p-2 rounded-full opacity-0 group-hover/attach:opacity-100 transition-opacity hover:bg-black/70"
+                                 className="absolute bottom-2 right-2 bg-zinc-950/80 text-white p-1.5 rounded-lg opacity-0 group-hover/attach:opacity-100 transition-opacity"
                                  title="Download Image"
                                >
-                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                                </a>
                              </div>
                            ) : (
-                             /* File Download Button */
                              <a 
                                href={msg.attachment} 
                                download={msg.attachmentName || 'document'} 
-                               className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors group/file ${isMe ? 'bg-black/10 border-white/20 hover:bg-black/20' : 'bg-white border-neutral-200 hover:border-neutral-300 shadow-sm'}`}
+                               className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors group/file ${isMe ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}
                                title="Download File"
                              >
-                               <div className={`p-2 rounded-lg ${isMe ? 'bg-white/20' : 'bg-[#e8f2ff] text-[#0066FF]'}`}>
-                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                               <div className="p-1.5 rounded bg-zinc-800 text-white font-bold text-[9px] uppercase">
+                                 FILE
                                </div>
-                               <span className="text-sm font-semibold truncate max-w-[160px]">{msg.attachmentName}</span>
-                               <svg className={`w-4 h-4 ml-2 opacity-50 group-hover/file:opacity-100 transition-opacity ${isMe ? 'text-white' : 'text-neutral-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                               <span className="text-xs font-semibold truncate max-w-[150px]">{msg.attachmentName}</span>
+                               <svg className="w-3.5 h-3.5 ml-auto opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                              </a>
                            )}
                         </div>
@@ -306,27 +282,23 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
           })
         )}
         <div ref={messagesEndRef} />
-        
       </div>
 
       {/* Input Area */}
-      <div className="shrink-0 pt-4 px-2">
-        
-        {/* Attachment Preview UI */}
+      <div className="shrink-0 pt-2 px-1">
         {attachment && (
-          <div className="px-6 py-3 mb-3 border border-neutral-200 rounded-2xl flex items-center justify-between bg-white shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] font-bold text-[#0066FF] uppercase tracking-wider bg-[#e8f2ff] px-2.5 py-1 rounded-sm">Attached</span>
-              <span className="text-sm font-medium text-black truncate max-w-[200px]">{attachmentName}</span>
+          <div className="px-4 py-2 mb-2 border border-zinc-200 rounded-xl flex items-center justify-between bg-zinc-50">
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-bold text-white bg-zinc-950 px-2 py-0.5 rounded">ATTACHMENT</span>
+              <span className="text-xs font-medium text-zinc-900 truncate max-w-[180px]">{attachmentName}</span>
             </div>
-            <button onClick={() => { setAttachment(null); setAttachmentName(null); }} className="text-neutral-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors">
-               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            <button onClick={() => { setAttachment(null); setAttachmentName(null); }} className="text-zinc-400 hover:text-zinc-950 p-1">
+               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
         )}
 
-        <form onSubmit={handleSendMessage} className="flex gap-3 items-center">
-          
+        <form onSubmit={handleSendMessage} className="flex gap-2 items-center">
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -336,26 +308,26 @@ export default function LocalChat({ selectedProject, username, members }: LocalC
           <button 
             type="button" 
             onClick={() => fileInputRef.current?.click()}
-            className="w-12 h-12 rounded-full bg-[#f4f5f8] border border-neutral-100 flex items-center justify-center text-neutral-500 hover:text-[#0066FF] hover:border-blue-100 transition-colors shrink-0 shadow-sm"
-            title="Attach a file"
+            className="w-10 h-10 rounded-xl bg-zinc-100 border border-zinc-200 flex items-center justify-center text-zinc-700 hover:text-zinc-950 hover:bg-zinc-200 transition-colors shrink-0"
+            title="Attach file"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
           </button>
 
           <input
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a secure message..."
-            className="flex-1 bg-[#f4f5f8] border border-neutral-100 rounded-full px-6 py-3.5 text-sm font-medium text-black placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-200 focus:bg-white transition-all shadow-sm"
+            placeholder="Type encrypted P2P message..."
+            className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-xs font-medium text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-zinc-950 transition-all"
           />
           
           <button 
             type="submit"
             disabled={!newMessage.trim() && !attachment}
-            className="w-12 h-12 rounded-full bg-[#0066FF] flex items-center justify-center text-white shadow-md disabled:opacity-50 disabled:bg-neutral-300 disabled:shadow-none hover:bg-blue-700 transition-all shrink-0"
+            className="w-10 h-10 rounded-xl bg-zinc-950 flex items-center justify-center text-white shadow-2xs disabled:opacity-40 hover:bg-black transition-all shrink-0"
           >
-            <svg className="w-5 h-5 translate-x-[-1px] translate-y-[1px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </svg>
           </button>
