@@ -21,7 +21,7 @@
     "build:win": "npm run build:next && npm run build:electron && electron-builder --win",
     "build:linux": "npm run build:next && npm run build:electron && electron-builder --linux",
     "build:all": "npm run build:next && npm run build:electron && electron-builder -mwl",
-    "start": "electron .",
+    "start": "npm run build:electron && electron .",
     "test": "jest",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
