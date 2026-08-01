@@ -8,39 +8,26 @@ interface SettingsProps {
 }
 
 export default function Settings({ members, inviteToken, handleGenerateInvite }: SettingsProps) {
-  
-  // Helper to colorize members uniquely with pastel colors
-  const getAvatarColor = (index: number) => {
-    const colors = ['bg-[#e0e7ff]', 'bg-[#fce4ec]', 'bg-[#e8f5e9]', 'bg-[#fff3e0]', 'bg-[#f3e5f5]'];
-    return colors[index % colors.length];
-  };
-
-  const getAvatarTextColor = (index: number) => {
-    const colors = ['text-[#3730a3]', 'text-[#880e4f]', 'text-[#1b5e20]', 'text-[#e65100]', 'text-[#4a148c]'];
-    return colors[index % colors.length];
-  };
-
   return (
-    <div className="max-w-4xl w-full mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-300 pb-10">
+    <div className="max-w-4xl w-full mx-auto space-y-6 animate-in fade-in duration-150 pb-6">
       
       {/* Invite Section */}
-      <div className="bg-white border border-neutral-100 shadow-sm rounded-[32px] p-10">
-        <h3 className="text-2xl font-bold text-black mb-3 tracking-tight">Team Access</h3>
-        <p className="text-sm font-medium text-neutral-500 mb-8 max-w-2xl">
-          AirWork connects directly peer-to-peer. Generate a temporary, encrypted invite token to allow a collaborator to sync with this project vault over your local network.
+      <div className="bg-white border border-zinc-200 shadow-2xs rounded-2xl p-6">
+        <h3 className="text-lg font-bold text-zinc-950 mb-1">Project Peer Access</h3>
+        <p className="text-xs font-medium text-zinc-500 mb-6 max-w-2xl">
+          Generate encrypted P2P invite tokens to sync this project vault directly over your local area network (LAN).
         </p>
         
         {inviteToken ? (
-          <div className="p-6 bg-[#e8f5e9] border border-[#c8e6c9] rounded-2xl shadow-inner relative overflow-hidden">
-            <div className="absolute right-0 top-0 w-32 h-32 bg-white rounded-full blur-3xl opacity-40"></div>
-            <p className="text-xs font-bold text-[#1b5e20] uppercase tracking-widest mb-3 relative z-10">Active Invite Token (Expires in 24h)</p>
-            <div className="flex gap-4 relative z-10">
-              <code className="flex-1 px-5 py-4 bg-white border border-[#a5d6a7] text-black font-mono text-lg rounded-xl shadow-sm selection:bg-[#c8e6c9]">
+          <div className="p-5 bg-zinc-950 text-white rounded-xl shadow-sm border border-zinc-900">
+            <p className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider mb-2">Active LAN Invite Token (24h validity)</p>
+            <div className="flex gap-3 items-center">
+              <code className="flex-1 px-4 py-3 bg-zinc-900 border border-zinc-800 text-white font-mono text-sm rounded-lg selection:bg-white selection:text-zinc-950">
                 {inviteToken}
               </code>
               <button 
                 onClick={() => { navigator.clipboard.writeText(inviteToken); alert("Copied to clipboard!"); }}
-                className="px-8 py-4 bg-[#2e7d32] hover:bg-[#1b5e20] text-white text-sm font-bold rounded-xl transition-all shadow-sm"
+                className="px-5 py-3 bg-white text-zinc-950 hover:bg-zinc-200 text-xs font-bold rounded-lg transition-all shadow-2xs"
               >
                 Copy Token
               </button>
@@ -49,37 +36,37 @@ export default function Settings({ members, inviteToken, handleGenerateInvite }:
         ) : (
           <button 
             onClick={handleGenerateInvite}
-            className="px-8 py-3.5 bg-black hover:bg-neutral-800 text-white text-sm font-bold rounded-full flex items-center gap-3 transition-all shadow-md"
+            className="px-6 py-3 bg-zinc-950 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all shadow-2xs"
           >
-            <svg className="w-5 h-5 text-white/80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
             Generate Invite Token
           </button>
         )}
       </div>
 
       {/* Roster Section */}
-      <div className="bg-white border border-neutral-100 shadow-sm rounded-[32px] p-10">
-        <h3 className="text-2xl font-bold text-black mb-8 tracking-tight">Active Roster</h3>
+      <div className="bg-white border border-zinc-200 shadow-2xs rounded-2xl p-6">
+        <h3 className="text-lg font-bold text-zinc-950 mb-4">Active Roster</h3>
         
-        <div className="space-y-4">
+        <div className="space-y-2">
           {members.length === 0 ? (
-            <p className="text-sm font-medium text-neutral-400 italic">No members have joined yet.</p>
+            <p className="text-xs font-medium text-zinc-400 italic">No members joined yet.</p>
           ) : (
-            members.map((member, index) => (
-              <div key={member.id} className="flex items-center justify-between p-4 bg-[#f4f5f8] rounded-2xl border border-transparent hover:border-neutral-200 transition-colors">
-                <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 ${getAvatarColor(index)} ${getAvatarTextColor(index)} rounded-xl flex items-center justify-center font-bold text-lg shadow-sm uppercase`}>
+            members.map((member) => (
+              <div key={member.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-zinc-950 text-white rounded-lg flex items-center justify-center font-bold text-xs uppercase">
                     {member.username.charAt(0)}
                   </div>
                   <div>
-                    <div className="text-base font-bold text-black capitalize">{member.username}</div>
-                    <div className="text-xs text-neutral-500 font-medium uppercase tracking-wider mt-0.5">
+                    <div className="text-xs font-bold text-zinc-950 capitalize">{member.username}</div>
+                    <div className="text-[10px] text-zinc-500 font-mono">
                       Joined {new Date(member.joined_at + 'Z').toLocaleDateString()}
                     </div>
                   </div>
                 </div>
-                <span className={`px-4 py-1.5 text-[11px] font-bold uppercase tracking-widest rounded-full shadow-inner ${
-                  member.role === 'admin' ? 'bg-[#e8f2ff] text-[#0066FF] border border-blue-100' : 'bg-white text-neutral-500 border border-neutral-200'
+                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md border ${
+                  member.role === 'admin' ? 'bg-zinc-950 text-white border-zinc-950' : 'bg-white text-zinc-700 border-zinc-200'
                 }`}>
                   {member.role}
                 </span>
@@ -90,12 +77,12 @@ export default function Settings({ members, inviteToken, handleGenerateInvite }:
       </div>
 
       {/* Danger Zone */}
-      <div className="bg-[#fff5f5] border border-[#ffcdd2] shadow-sm rounded-[32px] p-10">
-        <h3 className="text-xl font-bold text-[#c62828] mb-3 tracking-tight">Danger Zone</h3>
-        <p className="text-sm font-medium text-[#ef5350] mb-8">
-          Deleting a project will permanently destroy all underlying SQLite rows and tasks from your local machine. This action cannot be undone.
+      <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-6">
+        <h3 className="text-base font-bold text-zinc-950 mb-1">Danger Zone</h3>
+        <p className="text-xs font-medium text-zinc-500 mb-4">
+          Permanently remove project database tables and records from your local storage.
         </p>
-        <button className="px-6 py-3 bg-[#ffebee] hover:bg-[#ffcdd2] text-[#c62828] border border-[#ffcdd2] text-sm font-bold rounded-full transition-colors shadow-sm">
+        <button className="px-5 py-2.5 bg-white hover:bg-zinc-100 text-zinc-950 border border-zinc-300 text-xs font-bold rounded-xl transition-all shadow-2xs">
           Delete Project Vault
         </button>
       </div>
