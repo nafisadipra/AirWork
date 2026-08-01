@@ -20,18 +20,19 @@ interface EditorProps {
 
 const MenuButton = ({ onClick, isActive, children }: { onClick: () => void, isActive?: boolean, children: React.ReactNode }) => (
   <button
+    type="button"
     onClick={onClick}
-    className={`px-2.5 py-1.5 rounded-sm text-xs font-bold transition-colors ${
+    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
       isActive 
-        ? 'bg-[#0066FF] text-white shadow-sm' 
-        : 'text-[#A0A0A0] hover:bg-[#2A2A2A] hover:text-[#E0E0E0]'
+        ? 'bg-zinc-950 text-white shadow-2xs' 
+        : 'text-zinc-600 hover:bg-zinc-200 hover:text-zinc-950'
     }`}
   >
     {children}
   </button>
 );
 
-const Divider = () => <div className="w-px h-6 bg-[#2A2A2A] mx-1"></div>;
+const Divider = () => <div className="w-px h-5 bg-zinc-300 mx-1"></div>;
 
 export default function Editor({ documentId, username, branchId, onMergeSuccess }: EditorProps) {
   const [ydoc] = useState(() => new Y.Doc());
@@ -44,9 +45,6 @@ export default function Editor({ documentId, username, branchId, onMergeSuccess 
 
   const syncId = branchId || documentId;
 
-  // ==========================================
-  // P2P SYNC ENGINE & DB SAVING
-  // ==========================================
   useEffect(() => {
     const api = (window as any).electronAPI;
     if (!api) return;
@@ -95,9 +93,6 @@ export default function Editor({ documentId, username, branchId, onMergeSuccess 
     };
   }, [ydoc, documentId, branchId]);
 
-  // ==========================================
-  // THE EDITOR INSTANCE
-  // ==========================================
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -111,7 +106,7 @@ export default function Editor({ documentId, username, branchId, onMergeSuccess 
     content: '',
     editorProps: {
       attributes: {
-        class: 'focus:outline-none min-h-[500px] text-[#E0E0E0] p-4',
+        class: 'focus:outline-none min-h-[450px] text-zinc-900 p-6 font-sans leading-relaxed',
       },
     },
   });
@@ -151,7 +146,7 @@ export default function Editor({ documentId, username, branchId, onMergeSuccess 
   };
 
   const handleRestoreVersion = async (versionId: string) => {
-    if(!confirm("Are you sure? This will instantly overwrite the current document and broadcast it to everyone.")) return;
+    if(!confirm("Are you sure? Restoring will replace current document content.")) return;
     
     const api = (window as any).electronAPI;
     const res = await api.restoreVersion({ documentId: syncId, versionId });
@@ -160,7 +155,7 @@ export default function Editor({ documentId, username, branchId, onMergeSuccess 
       editor.commands.setContent(res.html);
       setShowHistoryModal(false);
     } else if (res.success && !res.html) {
-      alert("Could not restore. This snapshot might be from an older version of the app before we upgraded the history engine.");
+      alert("Could not restore snapshot.");
     }
   };
 
@@ -186,20 +181,16 @@ export default function Editor({ documentId, username, branchId, onMergeSuccess 
     }
   };
 
-  // <--- NEW: THE BRUTE FORCE OVERWRITE --->
   const handleForceOverwrite = async () => {
     if (!branchId) return;
-    if(!confirm("⚠️ WARNING: This will completely overwrite and replace the Main branch with exactly what is on your screen right now. Are you sure, batman?")) return;
+    if(!confirm("⚠️ Overwrite Main branch with this branch content?")) return;
     
     setIsMerging(true);
     try {
       const api = (window as any).electronAPI;
-      
-      // Save current screen
       const fullState = Array.from(Y.encodeStateAsUpdate(ydoc));
       await api.saveDocument({ docId: branchId, state: fullState });
 
-      // Nuke and replace main
       const res = await api.forceOverwriteBranch({ branchId, documentId });
       
       if (res.success && onMergeSuccess) {
@@ -215,42 +206,41 @@ export default function Editor({ documentId, username, branchId, onMergeSuccess 
   };
 
   if (!editor) {
-    return <div className="text-[#666] text-sm flex items-center gap-2"><span className="animate-spin text-[#0066FF]">⟳</span> Loading Editor Engine...</div>;
+    return <div className="text-zinc-500 text-xs py-8 text-center font-medium">Loading editor engine...</div>;
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#121212] border border-[#2A2A2A] rounded-md overflow-hidden shadow-lg relative">
+    <div className="w-full h-full flex flex-col bg-white border border-zinc-200 rounded-xl overflow-hidden shadow-2xs relative">
       
       <style dangerouslySetInnerHTML={{__html: `
-        .ProseMirror h1 { font-size: 2.25rem; font-weight: 800; margin-top: 1.5rem; margin-bottom: 0.5rem; color: #ffffff; line-height: 1.2; }
-        .ProseMirror h2 { font-size: 1.75rem; font-weight: 700; margin-top: 1.25rem; margin-bottom: 0.5rem; color: #eeeeee; line-height: 1.3; }
-        .ProseMirror h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; color: #dddddd; line-height: 1.4; }
-        .ProseMirror p { margin-top: 0.5rem; margin-bottom: 0.5rem; min-height: 1rem; }
+        .ProseMirror h1 { font-size: 2rem; font-weight: 800; margin-top: 1.25rem; margin-bottom: 0.5rem; color: #09090b; line-height: 1.2; }
+        .ProseMirror h2 { font-size: 1.5rem; font-weight: 700; margin-top: 1rem; margin-bottom: 0.5rem; color: #18181b; line-height: 1.3; }
+        .ProseMirror h3 { font-size: 1.2rem; font-weight: 600; margin-top: 0.85rem; margin-bottom: 0.5rem; color: #27272a; line-height: 1.4; }
+        .ProseMirror p { margin-top: 0.4rem; margin-bottom: 0.4rem; color: #18181b; }
         .ProseMirror ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
         .ProseMirror ol { list-style-type: decimal; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
-        .ProseMirror li p { margin: 0; }
-        .ProseMirror blockquote { border-left: 3px solid #0066FF; padding-left: 1rem; margin-top: 1rem; margin-bottom: 1rem; font-style: italic; color: #A0A0A0; background: rgba(0, 102, 255, 0.05); padding-top: 0.25rem; padding-bottom: 0.25rem; }
-        .ProseMirror pre { background: #1A1A1A; border: 1px solid #2A2A2A; padding: 1rem; border-radius: 4px; font-family: monospace; overflow-x: auto; margin-top: 1rem; margin-bottom: 1rem; }
-        .ProseMirror code { font-family: monospace; color: #4DA6FF; background: #1A1A1A; padding: 0.2rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
+        .ProseMirror blockquote { border-left: 3px solid #09090b; padding-left: 1rem; margin-top: 0.75rem; margin-bottom: 0.75rem; font-style: italic; color: #52525b; background: #f4f4f5; padding-top: 0.5rem; padding-bottom: 0.5rem; border-radius: 0 0.375rem 0.375rem 0; }
+        .ProseMirror pre { background: #18181b; color: #f4f4f5; padding: 1rem; border-radius: 0.5rem; font-family: monospace; font-size: 0.85rem; margin-top: 0.75rem; margin-bottom: 0.75rem; overflow-x: auto; }
+        .ProseMirror code { font-family: monospace; color: #09090b; background: #f4f4f5; border: 1px solid #e4e4e7; padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-size: 0.85em; }
         .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0; }
         .ProseMirror ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.25rem 0; }
-        .ProseMirror ul[data-type="taskList"] input[type="checkbox"] { margin-top: 0.35rem; cursor: pointer; }
       `}} />
 
-      <div className="flex flex-wrap items-center gap-1 p-2 bg-[#0A0A0A] border-b border-[#2A2A2A] sticky top-0 z-10">
+      {/* Editor Toolbar */}
+      <div className="flex flex-wrap items-center gap-1 p-2 bg-zinc-50 border-b border-zinc-200 sticky top-0 z-10">
         <MenuButton onClick={() => editor.chain().focus().toggleBold().run()} isActive={editor.isActive('bold')}>B</MenuButton>
         <MenuButton onClick={() => editor.chain().focus().toggleItalic().run()} isActive={editor.isActive('italic')}><i>I</i></MenuButton>
         <MenuButton onClick={() => editor.chain().focus().toggleUnderline().run()} isActive={editor.isActive('underline')}><u>U</u></MenuButton>
         <MenuButton onClick={() => editor.chain().focus().toggleStrike().run()} isActive={editor.isActive('strike')}><s>S</s></MenuButton>
         <Divider />
-        <MenuButton onClick={() => editor.chain().focus().setParagraph().run()} isActive={editor.isActive('paragraph')}>¶</MenuButton>
+        <MenuButton onClick={() => editor.chain().focus().setParagraph().run()} isActive={editor.isActive('paragraph')}>P</MenuButton>
         <MenuButton onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} isActive={editor.isActive('heading', { level: 1 })}>H1</MenuButton>
         <MenuButton onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} isActive={editor.isActive('heading', { level: 2 })}>H2</MenuButton>
         <MenuButton onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} isActive={editor.isActive('heading', { level: 3 })}>H3</MenuButton>
         <Divider />
-        <MenuButton onClick={() => editor.chain().focus().setTextAlign('left').run()} isActive={editor.isActive({ textAlign: 'left' })}>↤ Left</MenuButton>
-        <MenuButton onClick={() => editor.chain().focus().setTextAlign('center').run()} isActive={editor.isActive({ textAlign: 'center' })}>↔ Center</MenuButton>
-        <MenuButton onClick={() => editor.chain().focus().setTextAlign('right').run()} isActive={editor.isActive({ textAlign: 'right' })}>Right ↦</MenuButton>
+        <MenuButton onClick={() => editor.chain().focus().setTextAlign('left').run()} isActive={editor.isActive({ textAlign: 'left' })}>Left</MenuButton>
+        <MenuButton onClick={() => editor.chain().focus().setTextAlign('center').run()} isActive={editor.isActive({ textAlign: 'center' })}>Center</MenuButton>
+        <MenuButton onClick={() => editor.chain().focus().setTextAlign('right').run()} isActive={editor.isActive({ textAlign: 'right' })}>Right</MenuButton>
         <Divider />
         <MenuButton onClick={() => editor.chain().focus().toggleBulletList().run()} isActive={editor.isActive('bulletList')}>• List</MenuButton>
         <MenuButton onClick={() => editor.chain().focus().toggleOrderedList().run()} isActive={editor.isActive('orderedList')}>1. List</MenuButton>
@@ -260,90 +250,89 @@ export default function Editor({ documentId, username, branchId, onMergeSuccess 
         <MenuButton onClick={() => editor.chain().focus().toggleCodeBlock().run()} isActive={editor.isActive('codeBlock')}>&lt;/&gt; Code</MenuButton>
 
         <div className="ml-auto flex items-center gap-2">
-          
           <button 
+            type="button"
             onClick={() => { setShowHistoryModal(true); fetchVersions(); }}
-            className="px-3 py-1.5 bg-[#1A1A1A] border border-[#2A2A2A] hover:bg-[#2A2A2A] text-[#E0E0E0] hover:text-white rounded-sm text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
+            className="px-3 py-1.5 bg-white border border-zinc-200 hover:border-zinc-400 text-zinc-800 rounded-lg text-xs font-bold transition-all shadow-2xs"
           >
-            🕒 History
+            History
           </button>
 
           {branchId && (
             <>
-              {/* <--- NEW: OVERWRITE BUTTON ---> */}
               <button 
+                type="button"
                 onClick={handleForceOverwrite} 
                 disabled={isMerging}
-                className="px-3 py-1.5 bg-red-600/10 hover:bg-red-600/20 text-red-500 border border-red-500/30 disabled:opacity-50 text-xs font-bold uppercase tracking-wider rounded-sm flex items-center gap-1.5 transition-colors shadow-sm"
-                title="Completely overwrite Main with this branch"
+                className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 disabled:opacity-50 text-xs font-bold rounded-lg transition-all"
               >
-                Force Overwrite
+                Overwrite Main
               </button>
 
               <button 
+                type="button"
                 onClick={handleMerge} 
                 disabled={isMerging}
-                className="px-3 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-green-800 disabled:text-green-300 text-white text-xs font-bold uppercase tracking-wider rounded-sm flex items-center gap-1.5 transition-colors shadow-sm"
-                title="Mathematically combine changes"
+                className="px-3 py-1.5 bg-zinc-950 hover:bg-black disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-all shadow-2xs"
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7l-2 2m2-2l2 2m4 4l2-2m-2 2l-2-2" /></svg>
                 {isMerging ? 'Merging...' : 'Safe Merge'}
               </button>
             </>
           )}
         </div>
-
       </div>
 
-      <div className="flex-1 overflow-y-auto cursor-text bg-[#121212]">
+      {/* Editor Content Box */}
+      <div className="flex-1 overflow-y-auto cursor-text bg-white">
         <div className="max-w-4xl mx-auto">
           <EditorContent editor={editor} />
         </div>
       </div>
 
+      {/* History Modal */}
       {showHistoryModal && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#000000]/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-[#0A0A0A] border border-[#2A2A2A] rounded-sm p-6 shadow-2xl flex flex-col max-h-[80vh]">
-            <div className="flex justify-between items-center mb-6">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md bg-white border border-zinc-200 rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh]">
+            <div className="flex justify-between items-center mb-4">
               <div>
-                <h3 className="text-lg font-bold text-white">Version History</h3>
-                <p className="text-xs text-[#666666] uppercase font-bold tracking-widest mt-1">Save or restore snapshots</p>
+                <h3 className="text-base font-bold text-zinc-950">Version Snapshots</h3>
+                <p className="text-xs text-zinc-500 font-medium">Save or restore document states</p>
               </div>
-              <button onClick={() => setShowHistoryModal(false)} className="text-[#666] hover:text-white transition-colors">
+              <button onClick={() => setShowHistoryModal(false)} className="text-zinc-400 hover:text-zinc-950 transition-colors">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             
-            <form onSubmit={handleSaveVersion} className="mb-6 flex gap-2">
+            <form onSubmit={handleSaveVersion} className="mb-4 flex gap-2">
               <input 
                 type="text" 
                 value={newVersionMsg}
                 onChange={(e) => setNewVersionMsg(e.target.value)}
-                placeholder="e.g., Added System Architecture"
-                className="flex-1 bg-[#121212] border border-[#2A2A2A] rounded-sm px-3 py-2 text-sm text-white focus:outline-none focus:border-[#0066FF]"
+                placeholder="Snapshot description..."
+                className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-zinc-950"
               />
-              <button type="submit" className="px-4 py-2 bg-[#0066FF] hover:bg-[#0052CC] text-white text-xs font-bold uppercase rounded-sm transition-colors">
+              <button type="submit" className="px-4 py-2 bg-zinc-950 hover:bg-black text-white text-xs font-bold rounded-xl transition-colors">
                 Save
               </button>
             </form>
 
-            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
               {versions.length === 0 ? (
-                <div className="text-center py-8 text-[#666] text-xs font-bold uppercase tracking-wider border border-dashed border-[#2A2A2A] rounded-sm">
+                <div className="text-center py-6 text-zinc-400 text-xs font-medium border border-dashed border-zinc-200 rounded-xl">
                   No snapshots saved yet.
                 </div>
               ) : (
                 versions.map(v => (
-                  <div key={v.id} className="bg-[#121212] border border-[#2A2A2A] p-4 rounded-sm flex justify-between items-center group">
+                  <div key={v.id} className="bg-zinc-50 border border-zinc-200 p-3 rounded-xl flex justify-between items-center">
                     <div>
-                      <p className="text-sm font-bold text-white mb-1">{v.message}</p>
-                      <p className="text-[10px] text-[#808080] font-medium uppercase tracking-wider">
-                        Saved by <span className="text-[#4DA6FF]">{v.creator_name || 'Unknown'}</span> on {new Date(v.created_at + 'Z').toLocaleString()}
+                      <p className="text-xs font-bold text-zinc-900 mb-0.5">{v.message}</p>
+                      <p className="text-[10px] text-zinc-500 font-mono">
+                        {v.creator_name || 'User'} • {new Date(v.created_at + 'Z').toLocaleString()}
                       </p>
                     </div>
                     <button 
                       onClick={() => handleRestoreVersion(v.id)}
-                      className="px-3 py-1.5 bg-transparent border border-[#2A2A2A] text-[#666] hover:bg-yellow-500/10 hover:border-yellow-500/50 hover:text-yellow-500 rounded-sm text-[10px] font-bold uppercase tracking-wider transition-colors opacity-0 group-hover:opacity-100"
+                      className="px-2.5 py-1 bg-white border border-zinc-200 text-zinc-900 hover:bg-zinc-950 hover:text-white rounded-lg text-xs font-bold transition-all shadow-2xs"
                     >
                       Restore
                     </button>
