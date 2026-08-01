@@ -73,6 +73,29 @@ export default function Documents({ selectedProject, username }: DocumentsProps)
     }
   }, [activeDoc]);
 
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    
+    const handleSync = () => {
+      if (selectedProject) {
+        fetchDocuments();
+        if (activeDoc) {
+          fetchBranches(activeDoc.id);
+        }
+      }
+    };
+
+    if (api && api.onSyncRefresh) {
+      api.onSyncRefresh(handleSync);
+    }
+    
+    return () => {
+      if (api && api.removeSyncRefresh) {
+        api.removeSyncRefresh(handleSync);
+      }
+    };
+  }, [selectedProject, activeDoc]);
+
   const handleCreateDoc = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDocTitle.trim()) return;
