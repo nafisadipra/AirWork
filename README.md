@@ -35,9 +35,13 @@ npm run build:win     # Windows
 npm run build:linux   # Linux
 ```
 
+> **Note:** If `npm run dev` fails with `Electron ENOENT`, run `node node_modules/electron/install.js` to download the missing Electron binary.
+>
+> For full setup, development workflow, and detailed troubleshooting guide, see [RUNNING.md](file:///Users/user/Documents/AirWork/RUNNING.md).
+
 -----
 
-##  Requirements
+## Requirements
 
   - **Node.js** 18+
   - **npm** 9+
