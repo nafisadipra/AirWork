@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import CompactDatePicker from './CompactDatePicker';
 
 interface KanbanBoardProps {
   selectedProject: any;
@@ -9,9 +10,10 @@ interface KanbanBoardProps {
   tasks: any[];
   setTasks: React.Dispatch<React.SetStateAction<any[]>>;
   fetchTasksAndMembers: (projectId: string) => Promise<void>;
+  username?: string;
 }
 
-export default function KanbanBoard({ selectedProject, members, tasks, setTasks, fetchTasksAndMembers }: KanbanBoardProps) {
+export default function KanbanBoard({ selectedProject, members, tasks, setTasks, fetchTasksAndMembers, username }: KanbanBoardProps) {
   const [addingTaskTo, setAddingTaskTo] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskAssignee, setNewTaskAssignee] = useState('');
@@ -28,8 +30,20 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
   ];
 
   const getMemberDisplayName = (member: any) => {
-    return member.nickname || member.username;
+    if (!member) return 'Unassigned';
+    return member.nickname || member.username || 'Member';
   };
+
+  // Build effective member list including project creator / logged-in user
+  const effectiveMembers = [...members];
+  if (username && !effectiveMembers.some(m => m.username === username || m.id === username)) {
+    effectiveMembers.unshift({
+      id: username,
+      username: username,
+      nickname: username,
+      role: 'admin'
+    });
+  }
 
   useEffect(() => {
     const api = (window as any).electronAPI;
@@ -47,7 +61,12 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (formRef.current && !formRef.current.contains(event.target as Node)) {
+      const target = event.target as HTMLElement;
+      if (target && target.closest && target.closest('.compact-date-picker-popover')) {
+        return;
+      }
+
+      if (formRef.current && !formRef.current.contains(target as Node)) {
         setAddingTaskTo(null);
         setNewTaskTitle('');
         setNewTaskAssignee('');
@@ -66,17 +85,24 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
     };
   }, [addingTaskTo]);
 
+  const handleOpenAddTask = (columnId: string) => {
+    setAddingTaskTo(columnId);
+    setNewTaskAssignee('');
+  };
+
   const handleCreateTask = async (e: React.FormEvent, status: string) => {
     e.preventDefault();
     if (!newTaskTitle.trim() || !selectedProject) return;
     
+    const finalAssignee = newTaskAssignee || effectiveMembers[0]?.id || username || null;
+
     try {
       const api = (window as any).electronAPI;
       const result = await api.createTask({ 
         projectId: selectedProject.id, 
         title: newTaskTitle, 
         status,
-        assigneeId: newTaskAssignee || null,
+        assigneeId: finalAssignee,
         startDate: newTaskStartDate || null,
         dueDate: newTaskDueDate || null
       });
@@ -133,6 +159,10 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
     e.preventDefault(); 
   };
 
+  const currentAssignedMember = newTaskAssignee 
+    ? effectiveMembers.find(m => m.id === newTaskAssignee || m.username === newTaskAssignee) 
+    : null;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 h-full pb-2 w-full items-start">
       {kanbanColumns.map(col => (
@@ -156,38 +186,44 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
 
           {/* Cards List */}
           <div className="flex-1 overflow-y-auto p-3 space-y-2.5 scrollbar-thin">
-            {tasks.filter(t => t.status === col.id).map((task, index) => (
-              <div 
-                key={task.id} 
-                draggable 
-                onDragStart={(e) => handleDragStart(e, task.id)} 
-                className="p-4 bg-white border border-zinc-200 rounded-xl cursor-grab hover:border-zinc-400 transition-all shadow-2xs relative group"
-              >
-                <button 
-                  onClick={() => handleDeleteTask(task.id)} 
-                  className="absolute top-3 right-3 text-zinc-400 hover:text-zinc-950 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+            {tasks.filter(t => t.status === col.id).map((task) => {
+              const cardAssignee = effectiveMembers.find(m => m.id === task.assigned_to || m.username === task.assigned_to) || effectiveMembers[0];
+              return (
+                <div 
+                  key={task.id} 
+                  draggable 
+                  onDragStart={(e) => handleDragStart(e, task.id)} 
+                  className="p-4 bg-white border border-zinc-200 rounded-xl cursor-grab hover:border-zinc-400 transition-all shadow-2xs relative group"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </button>
+                  <button 
+                    onClick={() => handleDeleteTask(task.id)} 
+                    className="absolute top-3 right-3 text-zinc-400 hover:text-zinc-950 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
 
-                <p className="text-xs font-semibold text-zinc-900 pr-6 mb-4 leading-relaxed">{task.title}</p>
-                
-                <div className="flex items-center justify-between mt-auto pt-3 border-t border-zinc-100">
-                  <div className="text-[10px] text-zinc-400 font-mono flex flex-col gap-0.5">
-                    <span>Start: {task.start_date ? new Date(task.start_date).toLocaleDateString() : (task.created_at ? new Date(task.created_at + 'Z').toLocaleDateString() : 'Today')}</span>
-                    {task.due_date && <span className="text-zinc-700 font-semibold">Due: {new Date(task.due_date).toLocaleDateString()}</span>}
-                  </div>
-                  {members.length > 0 && (
-                    <div 
-                      title={getMemberDisplayName(members[index % members.length])} 
-                      className="w-6 h-6 rounded-md bg-zinc-950 text-white flex items-center justify-center text-[10px] font-bold shadow-2xs uppercase"
-                    >
-                      {getMemberDisplayName(members[index % members.length]).charAt(0)}
+                  <p className="text-xs font-semibold text-zinc-900 pr-6 mb-4 leading-relaxed">{task.title}</p>
+                  
+                  <div className="flex items-center justify-between mt-auto pt-3 border-t border-zinc-100">
+                    <div className="text-[10px] text-zinc-400 font-mono flex flex-col gap-0.5">
+                      <span>Start: {task.start_date ? new Date(task.start_date).toLocaleDateString() : (task.created_at ? new Date(task.created_at + 'Z').toLocaleDateString() : 'Today')}</span>
+                      {task.due_date && <span className="text-zinc-700 font-semibold">Due: {new Date(task.due_date).toLocaleDateString()}</span>}
                     </div>
-                  )}
+                    {cardAssignee && (
+                      <div 
+                        title={`Assigned to: ${getMemberDisplayName(cardAssignee)}`} 
+                        className="flex items-center gap-1.5 bg-zinc-100 px-2 py-1 rounded-lg border border-zinc-200"
+                      >
+                        <div className="w-5 h-5 rounded bg-zinc-950 text-white flex items-center justify-center text-[9px] font-bold uppercase">
+                          {getMemberDisplayName(cardAssignee).charAt(0)}
+                        </div>
+                        <span className="text-[11px] font-semibold text-zinc-900">{getMemberDisplayName(cardAssignee)}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {/* Task Add Form */}
             {addingTaskTo === col.id ? (
@@ -212,11 +248,20 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
                       onClick={() => setIsAssigneeDropdownOpen(!isAssigneeDropdownOpen)}
                       className="w-full bg-zinc-50 border border-zinc-200 hover:border-zinc-400 text-zinc-800 text-xs rounded-lg px-3 py-2.5 outline-none font-medium transition-all flex justify-between items-center"
                     >
-                      <span className={newTaskAssignee ? 'text-zinc-950 font-bold' : 'text-zinc-400'}>
-                        {newTaskAssignee 
-                          ? getMemberDisplayName(members.find(m => m.id === newTaskAssignee) || { username: 'Unknown' }) 
-                          : 'Assign to member...'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {currentAssignedMember ? (
+                          <>
+                            <div className="w-4 h-4 rounded bg-zinc-950 text-white flex items-center justify-center text-[9px] font-bold uppercase shrink-0">
+                              {getMemberDisplayName(currentAssignedMember).charAt(0)}
+                            </div>
+                            <span className="text-zinc-950 font-bold">
+                              {getMemberDisplayName(currentAssignedMember)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-zinc-400 font-medium">Assign to member...</span>
+                        )}
+                      </div>
                       <svg className={`w-3.5 h-3.5 text-zinc-500 transition-transform ${isAssigneeDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                       </svg>
@@ -224,24 +269,26 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
 
                     {isAssigneeDropdownOpen && (
                       <div className="absolute z-50 w-full mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg overflow-hidden animate-in fade-in">
-                        <button
-                          type="button"
-                          onClick={() => { setNewTaskAssignee(''); setIsAssigneeDropdownOpen(false); }}
-                          className="w-full text-left px-3 py-2 text-xs font-medium text-zinc-500 hover:bg-zinc-50 transition-colors"
-                        >
-                          Unassigned
-                        </button>
-                        {members.map((m) => (
+                        {effectiveMembers.map((m) => (
                           <button
-                            key={m.id}
+                            key={m.id || m.username}
                             type="button"
-                            onClick={() => { setNewTaskAssignee(m.id); setIsAssigneeDropdownOpen(false); }}
-                            className="w-full text-left px-3 py-2 text-xs font-medium text-zinc-950 hover:bg-zinc-100 transition-colors flex items-center gap-2 border-t border-zinc-100"
+                            onClick={() => { setNewTaskAssignee(m.id || m.username); setIsAssigneeDropdownOpen(false); }}
+                            className={`w-full text-left px-3 py-2.5 text-xs font-medium hover:bg-zinc-100 transition-colors flex items-center justify-between gap-2 border-b border-zinc-100 last:border-0 ${
+                              (newTaskAssignee === m.id || newTaskAssignee === m.username) ? 'bg-zinc-50 font-bold' : ''
+                            }`}
                           >
-                            <div className="w-5 h-5 rounded bg-zinc-950 text-white flex items-center justify-center text-[9px] font-bold uppercase">
-                              {getMemberDisplayName(m).charAt(0)}
+                            <div className="flex items-center gap-2 truncate">
+                              <div className="w-5 h-5 rounded bg-zinc-950 text-white flex items-center justify-center text-[9px] font-bold uppercase shrink-0">
+                                {getMemberDisplayName(m).charAt(0)}
+                              </div>
+                              <span className="truncate text-zinc-950 font-semibold">{getMemberDisplayName(m)}</span>
                             </div>
-                            <span className="truncate">{getMemberDisplayName(m)}</span>
+                            {m.role && (
+                              <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider shrink-0">
+                                {m.role === 'admin' || m.role === 'creator' ? 'Creator' : m.role}
+                              </span>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -251,29 +298,21 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
 
                 <div className="grid grid-cols-2 gap-2">
                   {(col.id === 'todo' || col.id === 'in_progress') && (
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[9px] text-zinc-400 font-mono uppercase tracking-wider">Start Date</span>
-                      <input 
-                        type="date" 
-                        value={newTaskStartDate} 
-                        onChange={(e) => setNewTaskStartDate(e.target.value)} 
-                        className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-zinc-950" 
-                      />
-                    </div>
+                    <CompactDatePicker
+                      label="Start Date"
+                      placeholder="Start date..."
+                      value={newTaskStartDate}
+                      onChange={(val) => setNewTaskStartDate(val)}
+                    />
                   )}
 
                   {(col.id === 'todo' || col.id === 'done') && (
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[9px] text-zinc-400 font-mono uppercase tracking-wider">
-                        {col.id === 'done' ? 'End Date' : 'Due Date'}
-                      </span>
-                      <input 
-                        type="date" 
-                        value={newTaskDueDate} 
-                        onChange={(e) => setNewTaskDueDate(e.target.value)} 
-                        className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-zinc-950" 
-                      />
-                    </div>
+                    <CompactDatePicker
+                      label={col.id === 'done' ? 'End Date' : 'Due Date'}
+                      placeholder={col.id === 'done' ? 'End date...' : 'Due date...'}
+                      value={newTaskDueDate}
+                      onChange={(val) => setNewTaskDueDate(val)}
+                    />
                   )}
                 </div>
 
@@ -288,7 +327,7 @@ export default function KanbanBoard({ selectedProject, members, tasks, setTasks,
               </form>
             ) : (
               <button 
-                onClick={() => setAddingTaskTo(col.id)} 
+                onClick={() => handleOpenAddTask(col.id)} 
                 className="w-full text-left px-3 py-2.5 text-xs font-semibold text-zinc-500 hover:text-zinc-950 hover:bg-zinc-100 rounded-xl transition-all border border-dashed border-zinc-200 mt-1 flex items-center justify-center gap-1.5"
               >
                 <span>+</span> Add Task
