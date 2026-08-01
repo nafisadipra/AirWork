@@ -86,14 +86,9 @@ export default function Documents({ selectedProject, username }: DocumentsProps)
     };
 
     if (api && api.onSyncRefresh) {
-      api.onSyncRefresh(handleSync);
+      const unsubscribe = api.onSyncRefresh(handleSync);
+      return () => unsubscribe?.();
     }
-    
-    return () => {
-      if (api && api.removeSyncRefresh) {
-        api.removeSyncRefresh(handleSync);
-      }
-    };
   }, [selectedProject, activeDoc]);
 
   const handleCreateDoc = async (e: React.FormEvent) => {
