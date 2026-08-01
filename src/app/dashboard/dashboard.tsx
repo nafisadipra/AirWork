@@ -503,6 +503,7 @@ export default function Dashboard() {
                     tasks={tasks} 
                     setTasks={setTasks} 
                     fetchTasksAndMembers={fetchTasksAndMembers} 
+                    username={username}
                   />
                 )}
 
