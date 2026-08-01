@@ -444,7 +444,10 @@ function setupIpcHandlers() {
                                             INSERT INTO documents (id, project_id, title, yjs_state, last_edited_by, updated_at)
                                             VALUES (?, ?, ?, ?, ?, ?)
                                             ON CONFLICT(id) DO UPDATE SET
-                                            title = excluded.title
+                                            title = excluded.title,
+                                            yjs_state = COALESCE(excluded.yjs_state, documents.yjs_state),
+                                            last_edited_by = COALESCE(excluded.last_edited_by, documents.last_edited_by),
+                                            updated_at = excluded.updated_at
                                         `);
                                         payload.projectData.docs.forEach((d: any) => {
                                             insertDoc.run(
@@ -503,8 +506,15 @@ function setupIpcHandlers() {
                                     `);
                                     payload.tasks.forEach((t: any) => insertTask.run(t.id, t.project_id, t.title, t.status, t.position, t.assigned_to, t.start_date, t.due_date));
 
-                                    const insertDoc = db.prepare(`INSERT INTO documents (id, project_id, title, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`);
-                                    payload.docs.forEach((d: any) => insertDoc.run(d.id, d.project_id, d.title, d.updated_at));
+                                    const insertDoc = db.prepare(`
+                                        INSERT INTO documents (id, project_id, title, yjs_state, last_edited_by, updated_at) 
+                                        VALUES (?, ?, ?, ?, ?, ?) 
+                                        ON CONFLICT(id) DO UPDATE SET
+                                        title = excluded.title,
+                                        yjs_state = COALESCE(excluded.yjs_state, documents.yjs_state),
+                                        updated_at = excluded.updated_at
+                                    `);
+                                    payload.docs.forEach((d: any) => insertDoc.run(d.id, d.project_id, d.title, d.yjs_state || null, d.last_edited_by || null, d.updated_at || new Date().toISOString()));
 
                                     if (payload.messages) {
                                         const insertMsg = db.prepare(`INSERT INTO project_messages (id, project_id, sender, text, attachment, attachment_name, is_edited, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`);
@@ -674,15 +684,37 @@ function setupIpcHandlers() {
         try {
             const taskId = uuidv4();
             const db = activeDatabase.getDb();
+
+            // 1. Verify project exists
+            const projectRecord = db.prepare(`SELECT id FROM projects WHERE id = ?`).get(projectId) as any;
+            if (!projectRecord) {
+                return { success: false, error: `Project ID ${projectId} not found in database.` };
+            }
+
+            // 2. Safely resolve peer ID for assigned_to
+            let validAssigneeId: string | null = null;
+            if (assigneeId) {
+                const peerRecord = db.prepare(`SELECT id FROM peers WHERE id = ? OR username = ?`).get(assigneeId, assigneeId) as any;
+                if (peerRecord) {
+                    validAssigneeId = peerRecord.id;
+                }
+            }
+
             const posResult = db.prepare(`SELECT MAX(position) as maxPos FROM tasks WHERE project_id = ? AND status = ?`).get(projectId, status) as any;
             const position = (posResult?.maxPos || 0) + 1000;
-            db.prepare(`INSERT INTO tasks (id, project_id, title, status, position, assigned_to, start_date, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(taskId, projectId, title, status, position, assigneeId || null, startDate || null, dueDate || null);
+            
+            db.prepare(`
+                INSERT INTO tasks (id, project_id, title, status, position, assigned_to, start_date, due_date) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(taskId, projectId, title, status, position, validAssigneeId, startDate || null, dueDate || null);
+
             if (p2pEngine) {
                 const newTask = db.prepare(`SELECT * FROM tasks WHERE id = ?`).get(taskId);
                 p2pEngine.broadcast({ type: 'SYNC_TASK_UPSERT', task: newTask });
             }
             return { success: true, taskId };
         } catch (error: any) {
+            console.error('[task:create] Error:', error);
             return { success: false, error: error.message };
         }
     });
@@ -713,20 +745,21 @@ function setupIpcHandlers() {
     });
 
     ipcMain.handle('doc:create', async (_event, { projectId, title }) => {
-    if (!activeDatabase) return { success: false, error: 'Database not active' };
-    try {
-        const docId = uuidv4();
-        const db = activeDatabase.getDb();
-        db.prepare(`INSERT INTO documents (id, project_id, title) VALUES (?, ?, ?)`).run(docId, projectId, title);
-        if (p2pEngine) {
-            const newDoc = db.prepare(`SELECT * FROM documents WHERE id = ?`).get(docId);
-            p2pEngine.broadcast({ type: 'SYNC_DOC_UPSERT', doc: newDoc });
+        if (!activeDatabase) return { success: false, error: 'Database not active' };
+        try {
+            const docId = uuidv4();
+            const db = activeDatabase.getDb();
+            db.prepare(`INSERT INTO documents (id, project_id, title) VALUES (?, ?, ?)`).run(docId, projectId, title);
+            if (p2pEngine) {
+                const newDoc = db.prepare(`SELECT * FROM documents WHERE id = ?`).get(docId);
+                p2pEngine.broadcast({ type: 'SYNC_DOC_UPSERT', doc: newDoc });
+            }
+            if (mainWindow) mainWindow.webContents.send('sync-refresh');
+            return { success: true, id: docId };
+        } catch (error: any) {
+            return { success: false, error: error.message };
         }
-        return { success: true, id: docId };
-    } catch (error: any) {
-        return { success: false, error: error.message };
-    }
-});
+    });
 
     ipcMain.handle('doc:list', async (_event, { projectId }) => {
         if (!activeDatabase) return { success: false, error: 'Database not active' };
