@@ -32,11 +32,11 @@
     "@node-rs/argon2": "^1.8.3",
     "@signalapp/libsignal-client": "^0.39.0",
     "@tiptap/core": "^2.27.2",
+    "@tiptap/extension-bullet-list": "^2.27.2",
     "@tiptap/extension-collaboration": "^2.27.2",
     "@tiptap/extension-collaboration-cursor": "^2.9.1",
-    "@tiptap/extension-bullet-list": "^2.27.2",
-    "@tiptap/extension-ordered-list": "^2.27.2",
     "@tiptap/extension-list-item": "^2.27.2",
+    "@tiptap/extension-ordered-list": "^2.27.2",
     "@tiptap/extension-task-item": "^2.27.2",
     "@tiptap/extension-task-list": "^2.27.2",
     "@tiptap/extension-text-align": "^2.27.2",
@@ -104,17 +104,23 @@
       "out/**/*"
     ],
     "mac": {
-  "category": "public.app-category.productivity",
-  "target": ["dmg", "zip"],
-  "hardenedRuntime": true,
-  "gatekeeperAssess": false,
-  "entitlements": "electron/entitlements.mac.plist",
-  "entitlementsInherit": "electron/entitlements.mac.plist",
-  "extendInfo": {
-    "NSLocalNetworkUsageDescription": "AirWork needs access to your local network to securely discover and sync offline with your teammates.",
-    "NSBonjourServices": ["_airwork._tcp", "_airwork._udp"]
-  }
-},
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "electron/entitlements.mac.plist",
+      "entitlementsInherit": "electron/entitlements.mac.plist",
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "AirWork needs access to your local network to securely discover and sync offline with your teammates.",
+        "NSBonjourServices": [
+          "_airwork._tcp",
+          "_airwork._udp"
+        ]
+      }
+    },
     "win": {
       "target": [
         "nsis",
