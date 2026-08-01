@@ -62,7 +62,9 @@ const electronAPI: IPCAPI = {
 
   // Sync Events
   onSyncRefresh: (callback: () => void) => {
-    ipcRenderer.on('sync-refresh', () => callback());
+    const listener = () => callback();
+    ipcRenderer.on('sync-refresh', listener);
+    return () => ipcRenderer.removeListener('sync-refresh', listener);
   },
 
   onSyncMessage: (callback: (data?: any) => void) => {
@@ -88,16 +90,24 @@ const electronAPI: IPCAPI = {
 
   // Events
   onPeerDiscovered: (callback) => {
-    ipcRenderer.on('peer-discovered', (_event, peerId) => callback(peerId));
+    const listener = (_event: any, peerId: any) => callback(peerId);
+    ipcRenderer.on('peer-discovered', listener);
+    return () => ipcRenderer.removeListener('peer-discovered', listener);
   },
   onPeerConnected: (callback) => {
-    ipcRenderer.on('peer-connected', (_event, peerId) => callback(peerId));
+    const listener = (_event: any, peerId: any) => callback(peerId);
+    ipcRenderer.on('peer-connected', listener);
+    return () => ipcRenderer.removeListener('peer-connected', listener);
   },
   onPeerDisconnected: (callback) => {
-    ipcRenderer.on('peer-disconnected', (_event, peerId) => callback(peerId));
+    const listener = (_event: any, peerId: any) => callback(peerId);
+    ipcRenderer.on('peer-disconnected', listener);
+    return () => ipcRenderer.removeListener('peer-disconnected', listener);
   },
   onUpdateAvailable: (callback) => {
-    ipcRenderer.on('update:available', (_event, info) => callback(info));
+    const listener = (_event: any, info: any) => callback(info);
+    ipcRenderer.on('update:available', listener);
+    return () => ipcRenderer.removeListener('update:available', listener);
   },
 
   // Live P2P Sync

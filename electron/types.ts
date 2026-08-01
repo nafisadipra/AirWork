@@ -89,7 +89,7 @@ export interface IPCAPI {
   getSafetyNumber: (peerId: string) => Promise<{ success: boolean; safetyNumber?: string }>;
 
   // Sync Events
-  onSyncRefresh: (callback: () => void) => void;
+  onSyncRefresh: (callback: () => void) => () => void;
   onSyncMessage: (callback: (data?: any) => void) => () => void;
 
   // Chat
@@ -105,10 +105,10 @@ export interface IPCAPI {
   restoreBackup: (backupPath: string, password: string) => Promise<{ success: boolean }>;
 
   // Event Listeners 
-  onPeerDiscovered: (callback: (peerId: string) => void) => void;
-  onPeerConnected: (callback: (peerId: string) => void) => void;
-  onPeerDisconnected: (callback: (peerId: string) => void) => void;
-  onUpdateAvailable: (callback: (info: any) => void) => void;
+  onPeerDiscovered: (callback: (peerId: string) => void) => () => void;
+  onPeerConnected: (callback: (peerId: string) => void) => () => void;
+  onPeerDisconnected: (callback: (peerId: string) => void) => () => void;
+  onUpdateAvailable: (callback: (info: any) => void) => () => void;
 
   // Live P2P Sync 
   sendDocumentUpdate: (data: { docId: string, update: number[] }) => void;
