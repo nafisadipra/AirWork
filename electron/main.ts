@@ -35,19 +35,27 @@ function createWindow() {
     }
   });
 
-  const isDev = process.env.npm_lifecycle_event === 'dev' || !app.isPackaged;
-  mainWindow.webContents.openDevTools();
+  const isDev = process.env.NODE_ENV === 'development' || 
+                process.env.npm_lifecycle_event === 'dev' || 
+                process.env.npm_lifecycle_event === 'dev:electron';
+
+  if (process.env.NODE_ENV === 'development' || process.env.npm_lifecycle_event === 'dev') {
+    mainWindow.webContents.openDevTools();
+  }
 
   if (isDev) {
-    console.log('Running in Dev Mode: Loading localhost:3000');
-    mainWindow.loadURL('http://localhost:3000');
+    console.log('Attempting Dev Mode: Loading http://localhost:3000');
+    mainWindow.loadURL('http://localhost:3000').catch((err) => {
+      console.warn('Could not connect to http://localhost:3000. Falling back to local app://index.html', err);
+      mainWindow?.loadURL('app://index.html');
+    });
   } else {
-    console.log('Running in Production: Loading compiled HTML');
+    console.log('Running in Production Mode: Loading compiled HTML');
     mainWindow.loadURL('app://index.html');
   }
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('http://localhost:3000') && !url.startsWith('file://')) {
+    if (!url.startsWith('http://localhost:3000') && !url.startsWith('app://') && !url.startsWith('file://')) {
       event.preventDefault();
     }
   });
