@@ -116,24 +116,21 @@ export default function Dashboard() {
       }
     };
     if (api && api.onSyncRefresh) {
-      api.onSyncRefresh(handleSync);
-    }
-    return () => {
-      if (api && api.removeSyncRefresh) {
-        api.removeSyncRefresh(handleSync);
-      }
+      const unsubscribe = api.onSyncRefresh(handleSync);
+      return () => unsubscribe?.();
     }
   }, [selectedProject, username]);
 
   useEffect(() => {
     const api = (window as any).electronAPI;
     if (api && api.onPeerDiscovered) {
-      api.onPeerDiscovered((peerData: any) => {
+      const unsubscribe = api.onPeerDiscovered((peerData: any) => {
         setRadarPeers((prev) => {
           if (prev.find(p => p.id === peerData.id)) return prev;
           return [...prev, peerData];
         });
       });
+      return () => unsubscribe?.();
     }
   }, []);
 
